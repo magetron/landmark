@@ -1,0 +1,4 @@
+Map files (manifest.json, map16x.bin, thumbnail.webp) for world, europe, africa, asia, northamerica, southamerica:
+OpenFrontIO, https://github.com/openfrontio/OpenFrontIO, resources/maps/ (their LICENSING.md lists /resources assets as CC BY-SA 4.0).
+Downloaded 2026-11-10, unmodified. (c) OpenFront and Contributors.
+Game rules in index.html follow formulas in their packages/engine/src/configuration/EngineConfig.ts (AGPL-3.0).

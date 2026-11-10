@@ -1,0 +1,385 @@
+{
+  "categories": ["featured", "continental", "africa"],
+  "featured_rank": 6,
+  "id": "Africa",
+  "map": {
+    "height": 2032,
+    "num_land_tiles": 2183462,
+    "width": 1948
+  },
+  "map16x": {
+    "height": 508,
+    "num_land_tiles": 130752,
+    "width": 487
+  },
+  "map4x": {
+    "height": 1016,
+    "num_land_tiles": 537587,
+    "width": 974
+  },
+  "name": "Africa",
+  "nations": [
+    {
+      "coordinates": [1144, 1894],
+      "flag": "za",
+      "name": "South Africa"
+    },
+    {
+      "coordinates": [1414, 661],
+      "flag": "sd",
+      "name": "Sudan"
+    },
+    {
+      "coordinates": [1804, 1574],
+      "flag": "mg",
+      "name": "Madagascar"
+    },
+    {
+      "coordinates": [1148, 892],
+      "flag": "cf",
+      "name": "Central African Republic"
+    },
+    {
+      "coordinates": [786, 52],
+      "flag": "tn",
+      "name": "Tunisia"
+    },
+    {
+      "coordinates": [1364, 236],
+      "flag": "eg",
+      "name": "Egypt"
+    },
+    {
+      "coordinates": [345, 139],
+      "flag": "ma",
+      "name": "Morocco"
+    },
+    {
+      "coordinates": [541, 79],
+      "flag": "dz",
+      "name": "Algeria"
+    },
+    {
+      "coordinates": [1038, 243],
+      "flag": "ly",
+      "name": "Libya"
+    },
+    {
+      "coordinates": [767, 510],
+      "flag": "ne",
+      "name": "Niger"
+    },
+    {
+      "coordinates": [208, 832],
+      "flag": "sl",
+      "name": "Sierra Leone"
+    },
+    {
+      "coordinates": [447, 463],
+      "flag": "ml",
+      "name": "Mali"
+    },
+    {
+      "coordinates": [266, 841],
+      "flag": "lr",
+      "name": "Liberia"
+    },
+    {
+      "coordinates": [722, 768],
+      "flag": "ng",
+      "name": "Nigeria"
+    },
+    {
+      "coordinates": [1132, 1118],
+      "flag": "cd",
+      "name": "DR Congo"
+    },
+    {
+      "coordinates": [1021, 1365],
+      "flag": "ao",
+      "name": "Angola"
+    },
+    {
+      "coordinates": [1012, 1659],
+      "flag": "na",
+      "name": "Namibia"
+    },
+    {
+      "coordinates": [1174, 1642],
+      "flag": "bw",
+      "name": "Botswana"
+    },
+    {
+      "coordinates": [604, 857],
+      "flag": "bj",
+      "name": "Benin"
+    },
+    {
+      "coordinates": [1340, 1611],
+      "flag": "zw",
+      "name": "Zimbabwe"
+    },
+    {
+      "coordinates": [1551, 1516],
+      "flag": "mz",
+      "name": "Mozambique"
+    },
+    {
+      "coordinates": [1492, 1225],
+      "flag": "tz",
+      "name": "Tanzania"
+    },
+    {
+      "coordinates": [1596, 1023],
+      "flag": "ke",
+      "name": "Kenya"
+    },
+    {
+      "coordinates": [1844, 910],
+      "flag": "so",
+      "name": "Somalia"
+    },
+    {
+      "coordinates": [1582, 832],
+      "flag": "et",
+      "name": "Ethiopia"
+    },
+    {
+      "coordinates": [1347, 772],
+      "flag": "ss",
+      "name": "South Sudan"
+    },
+    {
+      "coordinates": [1472, 206],
+      "flag": "il",
+      "name": "Israel"
+    },
+    {
+      "coordinates": [1561, 63],
+      "flag": "sy",
+      "name": "Syria"
+    },
+    {
+      "coordinates": [1767, 186],
+      "flag": "iq",
+      "name": "Iraq"
+    },
+    {
+      "coordinates": [1757, 381],
+      "flag": "sa",
+      "name": "Saudi Arabia"
+    },
+    {
+      "coordinates": [1766, 638],
+      "flag": "ye",
+      "name": "Yemen"
+    },
+    {
+      "coordinates": [283, 15],
+      "flag": "pt",
+      "name": "Portugal"
+    },
+    {
+      "coordinates": [1123, 26],
+      "flag": "gr",
+      "name": "Greece"
+    },
+    {
+      "coordinates": [914, 23],
+      "flag": "it",
+      "name": "Italy"
+    },
+    {
+      "coordinates": [99, 644],
+      "flag": "sn",
+      "name": "Senegal"
+    },
+    {
+      "coordinates": [839, 1005],
+      "flag": "ga",
+      "name": "Gabon"
+    },
+    {
+      "coordinates": [355, 1500],
+      "flag": "sh",
+      "name": "Saint Helena"
+    },
+    {
+      "coordinates": [127, 279],
+      "flag": "ic",
+      "name": "Canary Islands"
+    },
+    {
+      "coordinates": [1428, 90],
+      "flag": "cy",
+      "name": "Cyprus"
+    },
+    {
+      "coordinates": [1707, 1381],
+      "flag": "km",
+      "name": "Comoros"
+    },
+    {
+      "coordinates": [1758, 1411],
+      "flag": "yt",
+      "name": "Mayotte"
+    },
+    {
+      "coordinates": [117, 1278],
+      "flag": "sh-ac",
+      "name": "Ascension Island"
+    },
+    {
+      "coordinates": [756, 964],
+      "flag": "gq",
+      "name": "Equatorial Guinea"
+    },
+    {
+      "coordinates": [697, 1053],
+      "flag": "st",
+      "name": "Sao Tome and Principe"
+    },
+    {
+      "coordinates": [181, 2029],
+      "flag": "sh-ta",
+      "name": "Tristan da Cunha"
+    },
+    {
+      "coordinates": [1906, 137],
+      "flag": "ir",
+      "name": "Iran"
+    },
+    {
+      "coordinates": [1407, 18],
+      "flag": "tr",
+      "name": "Türkiye"
+    },
+    {
+      "coordinates": [467, 9],
+      "flag": "es",
+      "name": "Spain"
+    },
+    {
+      "coordinates": [1565, 188],
+      "flag": "jo",
+      "name": "Jordan"
+    },
+    {
+      "coordinates": [1499, 124],
+      "flag": "lb",
+      "name": "Lebanon"
+    },
+    {
+      "coordinates": [1604, 641],
+      "flag": "er",
+      "name": "Eritrea"
+    },
+    {
+      "coordinates": [1021, 635],
+      "flag": "td",
+      "name": "Chad"
+    },
+    {
+      "coordinates": [119, 469],
+      "flag": "mr",
+      "name": "Mauritania"
+    },
+    {
+      "coordinates": [1414, 1042],
+      "flag": "ug",
+      "name": "Uganda"
+    },
+    {
+      "coordinates": [1679, 746],
+      "flag": "dj",
+      "name": "Djibouti"
+    },
+    {
+      "coordinates": [1355, 1819],
+      "flag": "sz",
+      "name": "eSwatini"
+    },
+    {
+      "coordinates": [1256, 1891],
+      "flag": "ls",
+      "name": "Lesotho"
+    },
+    {
+      "coordinates": [1255, 1411],
+      "flag": "zm",
+      "name": "Zambia"
+    },
+    {
+      "coordinates": [946, 1140],
+      "flag": "cg",
+      "name": "Republic of the Congo"
+    },
+    {
+      "coordinates": [879, 875],
+      "flag": "cm",
+      "name": "Cameroon"
+    },
+    {
+      "coordinates": [1446, 1396],
+      "flag": "mw",
+      "name": "Malawi"
+    },
+    {
+      "coordinates": [470, 641],
+      "flag": "bf",
+      "name": "Burkina Faso"
+    },
+    {
+      "coordinates": [148, 758],
+      "flag": "gn",
+      "name": "Guinea"
+    },
+    {
+      "coordinates": [101, 719],
+      "flag": "gw",
+      "name": "Guinea-Bissau"
+    },
+    {
+      "coordinates": [64, 689],
+      "flag": "gm",
+      "name": "The Gambia"
+    },
+    {
+      "coordinates": [463, 850],
+      "flag": "gh",
+      "name": "Ghana"
+    },
+    {
+      "coordinates": [343, 863],
+      "flag": "ci",
+      "name": "Côte d'Ivoire"
+    },
+    {
+      "coordinates": [555, 856],
+      "flag": "tg",
+      "name": "Togo"
+    },
+    {
+      "coordinates": [176, 311],
+      "flag": "eh",
+      "name": "Western Sahara"
+    },
+    {
+      "coordinates": [1347, 1087],
+      "flag": "rw",
+      "name": "Rwanda"
+    },
+    {
+      "coordinates": [1345, 1154],
+      "flag": "bi",
+      "name": "Burundi"
+    },
+    {
+      "coordinates": [44, 157],
+      "flag": "pt-ma",
+      "name": "Madeira"
+    }
+  ],
+  "themes": ["africa"],
+  "translation_key": "map.africa"
+}
