@@ -38,6 +38,8 @@ HOST_AWAY = 20             # seconds offline before the host role passes on
 ROOM_IDLE = 120            # seconds a lobby with nobody online is kept
 VERSION = 3                # the page checks this, so an old server left running is noticed
 GONE = object()            # put on a queue to tell its connection to stop
+PERF_LOG = os.path.join(ROOT, "perf.log")     # what each device measured during matches, one line per ten seconds
+perf_lock = threading.Lock()
 LETTERS = "ABCDEFGHJKLMNPRSTUVWXYZ"
 
 lock = threading.Lock()
@@ -184,7 +186,7 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path.endswith("/mp/events"):
             qs = parse_qs(url.query)
             return self.events(qs.get("name", [""])[0], qs.get("key", [""])[0][:40])
-        if url.path.endswith(".py"):
+        if url.path.endswith((".py", ".log")):
             return self.send_error(404)
         return super().do_GET()
 
@@ -249,6 +251,16 @@ class Handler(SimpleHTTPRequestHandler):
             cid = int(body.get("id", 0))
         except (ValueError, TypeError):
             return self.reply({"ok": False}, 400)
+        if what == "perf":
+            p = body.get("p")
+            if isinstance(p, dict):
+                with lock:
+                    name = clients[cid]["name"] if cid in clients else ""
+                line = json.dumps({"at": time.strftime("%Y-%m-%d %H:%M:%S"), "from": self.client_address[0], "name": name, **p})
+                with perf_lock:
+                    with open(PERF_LOG, "a", encoding="utf-8") as f:
+                        f.write(line + "\n")
+            return self.reply({"ok": True})
         with lock:
             c = clients.get(cid)
             if c is None:

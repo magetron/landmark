@@ -773,7 +773,7 @@ function apply(p,it){
     case 'retreat': { const a=g.attacks.find(a=>a.id===it.a && a.from===p); if (a) retreat(a); } break;
   }
 }
-function act(it){ if (G.mp) NET.send(it); else apply(ME,it); }
+function act(it){ if (G.mp){ it.z=Math.round(performance.now()); NET.send(it); } else apply(ME,it); }      // z: when it left, to time the round trip
 // send a share f of p's troops at the land under cell c: by land if it touches p's land, else by boat
 function doTap(p,c,f,byBoat){
   const g=G, {M,owner,mark}=g, P=g.players[p]; if (!M.land[c]) return;
@@ -811,6 +811,10 @@ function tapCell(c,byBoat){
 
 /* ---------- drawing ---------- */
 const cv=$('c'), ctx=cv.getContext('2d'), gcv=document.createElement('canvas'), gctx=gcv.getContext('2d');
+// Changed parts of the map go to its canvas as 32x32 patches, each a small image of its own. Safari hands the
+// whole image object to its drawing process on every putImageData call, whatever rectangle is asked for, so
+// patches cut from the full-map image cost megabytes apiece there.
+const TB=5, TS=1<<TB, timg=gctx.createImageData(TS,TS), tpx=new Uint32Array(timg.data.buffer);
 let img=null, px=null, V={s:1,x:0,y:0,min:1}, cw=0, ch=0, dpr=1;
 const CR=COLS.map(h=>parseInt(h.slice(1,3),16)), CG=COLS.map(h=>parseInt(h.slice(3,5),16)), CB=COLS.map(h=>parseInt(h.slice(5,7),16));
 const ALPHA=151, BORDER=COLS.map((h,i)=>((255<<24)|(((CB[i]*.72)|0)<<16)|(((CG[i]*.72)|0)<<8)|((CR[i]*.72)|0)));
@@ -846,10 +850,15 @@ function draw(){
     for (let c=0;c<N;c++) paint(c);
     g.redraw=false; g.dirty.length=0; g.dflag.fill(0); gctx.putImageData(img,0,0);
   } else if (g.dirty.length){
-    const tw=(W+63)>>6, tiles=g.tiles||(g.tiles=new Uint8Array(tw*((H+63)>>6))), hit=[];
-    for (const c of g.dirty){ g.dflag[c]=0; paint(c); const t=(((c/W)|0)>>6)*tw+((c%W)>>6); if (!tiles[t]){ tiles[t]=1; hit.push(t); } }
+    const tw=(W+TS-1)>>TB, tiles=g.tiles||(g.tiles=new Uint8Array(tw*((H+TS-1)>>TB))), hit=[];
+    for (const c of g.dirty){ g.dflag[c]=0; paint(c); const t=(((c/W)|0)>>TB)*tw+((c%W)>>TB); if (!tiles[t]){ tiles[t]=1; hit.push(t); } }
     g.dirty.length=0;
-    for (const t of hit){ tiles[t]=0; const x=(t%tw)<<6, y=((t/tw)|0)<<6; gctx.putImageData(img,0,0,x,y,Math.min(64,W-x),Math.min(64,H-y)); }
+    for (const t of hit){
+      tiles[t]=0; const x=(t%tw)<<TB, y=((t/tw)|0)<<TB, w=Math.min(TS,W-x), h=Math.min(TS,H-y);
+      for (let r=0;r<h;r++){ const o=(y+r)*W+x; tpx.set(px.subarray(o,o+w),r*TS); }
+      gctx.putImageData(timg,x,y,0,0,w,h);
+    }
+    PF.tiles=Math.max(PF.tiles,hit.length);
   }
   ctx.setTransform(dpr,0,0,dpr,0,0); ctx.fillStyle='#3c3c3c'; ctx.fillRect(0,0,cw,ch);
   ctx.imageSmoothingEnabled=V.s*dpr<1.5; ctx.imageSmoothingQuality='low';
@@ -919,15 +928,31 @@ function toast(s){ if (G && G.silent) return; const t=$('toast'); t.textContent=
 
 /* ---------- loop ---------- */
 let last=0, acc=0, hudAt=0;
+// what a network match costs on this device, reported to server.py every ten seconds (it keeps them in perf.log)
+const PF={at:0,n:0,slow:0,worst:0,sim:0,drw:0,tiles:0,gap:0,late:0,q:0,lat:[],heard:0};
+function report(ts){
+  const l=PF.lat.sort((a,b)=>a-b), r=x=>Math.round(x*10)/10;
+  if (PF.at && PF.n) fetch('mp/perf',{method:'POST',body:JSON.stringify({id:NET.id,p:{frames:PF.n,over50ms:PF.slow,worstFrame:r(PF.worst),simMax:r(PF.sim),drawMax:r(PF.drw),tilesMax:PF.tiles,
+    turnGapMax:r(PF.gap),turnsLate:PF.late,queueMax:PF.q,taps:l.length,tapMedian:r(l[l.length>>1]||0),tapMax:r(l[l.length-1]||0),
+    tick:G.tick,map:G.M.id,canvas:cv.width+'x'+cv.height,ua:navigator.userAgent.slice(0,150)}})}).catch(()=>{});
+  PF.at=ts; PF.n=PF.slow=PF.worst=PF.sim=PF.drw=PF.tiles=PF.gap=PF.late=PF.q=0; PF.lat=[];
+}
 function frame(ts){
-  const dt=Math.min(100,ts-last); last=ts;
+  const raw=ts-last, dt=Math.min(100,raw); last=ts;
   if (G){
+    const live=G.mp && NET && NET.ready && G.phase==='play', t0=live?performance.now():0;
     if (G.mp){ if (NET && NET.ready) pump(dt); }
     else if (G.phase==='play' && !paused){
       let f=dt*speed/100;
       while (f>0 && G.phase==='play'){ const s=Math.min(f,1-acc); advance(s); acc+=s; f-=s; if (acc>=1-1e-9){ acc=0; tick(); } }
     }
+    const t1=live?performance.now():0;
     draw(); if (ts-hudAt>120){ hudAt=ts; hud(); }
+    if (live){
+      const t2=performance.now(); PF.n++; if (raw>50) PF.slow++; if (raw<5000) PF.worst=Math.max(PF.worst,raw);
+      PF.sim=Math.max(PF.sim,t1-t0); PF.drw=Math.max(PF.drw,t2-t1); PF.q=Math.max(PF.q,NET.q.length);
+      if (ts-PF.at>10000) report(ts);
+    }
   }
   requestAnimationFrame(frame);
 }
@@ -1124,7 +1149,7 @@ function slice(){
   if (!n.cur){
     if (!n.q.length) return false;
     n.cur=n.q.shift(); n.sub=0;
-    for (const [p,it] of n.cur.in) apply(p,it);
+    for (const [p,it] of n.cur.in){ if (p===ME && it.z && n.q.length<3){ const d=performance.now()-it.z; if (d>=0 && d<5000) PF.lat.push(d); } apply(p,it); }
   }
   advance(1/NET_SUB);
   if (++n.sub===NET_SUB){
@@ -1182,7 +1207,7 @@ function netOpen(){
     else if (m.t==='state'){ n.rooms=m.rooms; n.room=m.room; renderMenu(); }
     else if (m.t==='start'){ n.q=[]; n.cur=null; n.ready=false; netStart(m); }
     else if (m.t==='catchup'){ n.q=[]; n.cur=null; for (let i=1;i<=m.n;i++) n.q.push({n:i,in:m.acts[i]||[]}); }
-    else if (m.t==='turn') n.q.push(m);
+    else if (m.t==='turn'){ n.q.push(m); const d=PF.heard?n.heard-PF.heard:0; PF.heard=n.heard; if (d<5000){ PF.gap=Math.max(PF.gap,d); if (d>180) PF.late++; } }
     else if (m.t==='stop') netDrop();
     else if (m.t==='desync') toast('Devices out of step');
   };
