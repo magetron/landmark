@@ -701,6 +701,41 @@ function blast(m){
   }
   g.fx.push({x:x0+.5,y:y0+.5,t:performance.now(),r:R,d:800+600*m.w});
 }
+// Computer nations' weapons (Normal and Hard). After each buy a nation draws what it saves for next: mostly a city,
+// often a missile, and once it has two cities now and then a nuke. So it never saves for weapons only.
+const nextWant = P => { const r=G.rnd(); return P.cities>=2 && r<.15 ? 2 : r<.5 ? 1 : 0; };
+// whom P would fire at: the nation it is fighting, was last hit by or likes least. Nobody, if it has no quarrel.
+function foeOf(P){
+  const g=G, p=P.id; let best=null, bs=0;
+  for (const Q of g.players){
+    if (!Q.alive || Q.id===p || allied(p,Q.id) || (Q.human && g.tick<g.grace)) continue;
+    let v=-relOf(p,Q.id); if (Q.id===P.lastHit) v+=30;
+    if (g.attacks.some(a=>!a.dead && ((a.from===p && a.to===Q.id) || (a.from===Q.id && a.to===p)))) v+=50;
+    if (v>bs){ bs=v; best=Q; }
+  }
+  return best;
+}
+// where on T's land to drop weapon w: of T's cities and a few of its cells drawn at random, the one whose circle
+// holds the most land of nations P is not allied with, a city in it counting as about a fifth of the circle
+function aim(P,T,w){
+  const g=G, {M,owner}=g, {W,H}=M, p=P.id, R=Math.round(ARMS[w].r*Math.sqrt(M.k)), city=(R*R*3/5)|0, cand=[];
+  for (const c of g.blds) if (owner[c]===T.id && g.bld[c]===1) cand.push(c);
+  for (let t=0, n=0; t<400 && n<8; t++){ const c=M.li[(g.rnd()*M.li.length)|0]; if (owner[c]===T.id){ cand.push(c); n++; } }
+  let best=-1, bs=-1;
+  for (const c0 of cand){
+    const x0=c0%W, y0=(c0/W)|0; let v=0;
+    for (let dy=-R;dy<=R;dy++){
+      const Y=y0+dy; if (Y<0 || Y>=H) continue;
+      for (let dx=-R;dx<=R;dx++){
+        if (dx*dx+dy*dy>R*R) continue;
+        const X=x0+dx; if (X<0 || X>=W) continue;
+        const c=Y*W+X, o=owner[c]; if (o && o!==p && !allied(p,o)) v+=g.bld[c]===1?city:1;
+      }
+    }
+    if (v>bs){ bs=v; best=c0; }
+  }
+  return best;
+}
 function pickCell(p,ok){ const g=G; for (let t=0;t<600;t++){ const c=(g.rnd()*g.M.N)|0; if (g.owner[c]===p && !g.bld[c] && ok(c)) return c; } return -1; }
 
 /* ---------- bot turn ---------- */
@@ -742,7 +777,19 @@ function think(P){
   if (P.lastHit && g.players[P.lastHit].alive && P.forts.length<3 && P.gold>=fortCost(P) && g.rnd()<(fl===FL.tortoise?.8:.3)){
     const c=pickCell(p,c=>touches(c,P.lastHit)); if (c>=0) build(p,c,2);
   }
-  if (P.gold>=cityCost(P)){ const c=pickCell(p,c=>ownNb(c,p)===4); if (c>=0) build(p,c,1); }
+  const arms=g.diff!=='easy' && !P.human;
+  if (arms && P.want){                        // saving for a weapon (1 missile, 2 nuke)
+    const w=P.want-1;
+    if (P.gold>=ARMS[w].cost){
+      const T=foeOf(P);
+      if (!T) P.want=0;                       // no quarrel with anyone: back to cities
+      else if (!(T.human && P.lastHit!==T.id && g.rnd()>g.dm.bias)){
+        const c=aim(P,T,w), gold=P.gold; if (c>=0) launch(p,c,w);
+        if (P.gold<gold) P.want=nextWant(P);
+      }
+    }
+  }
+  else if (P.gold>=cityCost(P)){ const c=pickCell(p,c=>ownNb(c,p)===4); if (c>=0 && build(p,c,1) && arms) P.want=nextWant(P); }
   if (fl.builder && P.forts.length<5 && P.gold>=fortCost(P)+cityCost(P) && nb.length){ const Q=nb[(g.rnd()*nb.length)|0], c=pickCell(p,c=>touches(c,Q.id)); if (c>=0) build(p,c,2); }
   if (mine.length>=(fl.multi||2)) return;
   if (neutral){
