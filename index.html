@@ -345,7 +345,7 @@ function newGame(M, diff, seed, nbots, humans){
   humans.forEach((nm,i)=>players.push(mk(i+1,nm,{human:true})));
   const H = humans.length;
   G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],tick:0,aid:0,phase:'spawn',
-       stamp:new Int32Array(M.N),mark:new Uint8Array(M.N),par:new Int32Array(M.N),q:new Int32Array(M.N),
+       stamp:new Int32Array(M.N),mark:new Uint8Array(M.N),par:new Int32Array(M.N),q:new Int32Array(M.N),seen:new Int32Array(M.N),gen:0,plan:null,
        dirty:[],dflag:new Uint8Array(M.N),redraw:true,grace:0,fx:[],mp:false};
   answered = {};
   // nations start apart from each other
@@ -577,17 +577,29 @@ function runAttack(a,f){
 /* ---------- sea routes: breadth-first search over water ---------- */
 // nearest landing by sea from p's coast. With `better`, a landing that passes it is preferred over the first
 // plain one, as long as it turns up soon after; `limit` caps how much sea is searched (bots only).
-function routeFrom(p, goal, better, limit){
-  const {M,owner,par,q}=G, {W,N,land,water}=M; par.fill(-2); let h=0,t=0;
-  for (let c=0;c<N;c++) if (owner[c]===p){
-    if (c%W>0 && water[c-1] && par[c-1]===-2){ par[c-1]=-1; q[t++]=c-1; }
-    if (c%W<W-1 && water[c+1] && par[c+1]===-2){ par[c+1]=-1; q[t++]=c+1; }
-    if (c>=W && water[c-W] && par[c-W]===-2){ par[c-W]=-1; q[t++]=c-W; }
-    if (c<N-W && water[c+W] && par[c+W]===-2){ par[c+W]=-1; q[t++]=c+W; }
+// The search starts from p's coast, found through the blocks that hold p's land (never a pass over the whole map),
+// and marks the sea it has visited with this search's number, so nothing needs clearing first.
+// seaStart sets a search up; seaRun carries it on for up to `budget` cells and returns the path, null when there
+// is no landing, or undefined when it has more sea to cover.
+function seaStart(p, goal, better, limit){
+  const g=G, {M,owner,par,q,seen}=g, {W,H,N,water}=M, gen=++g.gen, B=M.blk, bw=g.bw, bh=g.bh, base=p*bw*bh; let t=0;
+  for (let by=0;by<bh;by++) for (let bx=0;bx<bw;bx++){
+    if (!g.blk[base+by*bw+bx]) continue;
+    const x1=Math.min(W,(bx+1)*B), y1=Math.min(H,(by+1)*B);
+    for (let y=by*B;y<y1;y++) for (let x=bx*B, c=y*W+x; x<x1; x++, c++) if (owner[c]===p){
+      if (x>0 && water[c-1] && seen[c-1]!==gen){ seen[c-1]=gen; par[c-1]=-1; q[t++]=c-1; }
+      if (x<W-1 && water[c+1] && seen[c+1]!==gen){ seen[c+1]=gen; par[c+1]=-1; q[t++]=c+1; }
+      if (y>0 && water[c-W] && seen[c-W]!==gen){ seen[c-W]=gen; par[c-W]=-1; q[t++]=c-W; }
+      if (y<H-1 && water[c+W] && seen[c+W]!==gen){ seen[c+W]=gen; par[c+W]=-1; q[t++]=c+W; }
+    }
   }
-  const max=limit||N, extra=3000*M.sc*M.sc; let fc=-1, fd=-1, stop=max;
+  return {p,goal,better,gen,h:0,t,max:limit||N,stop:limit||N,fc:-1,fd:-1};
+}
+function seaRun(s, budget){
+  const {M,owner,par,q,seen}=G, {W,N,land,water}=M, {p,goal,better,gen}=s, extra=3000*M.sc*M.sc; let h=s.h, t=s.t;
   const path=(c,d)=>{ const r=[d]; for (let w=c;w>=0;w=par[w]) r.push(w); return r.reverse(); };
-  while (h<t && h<stop){
+  while (h<t && h<s.stop){
+    if (budget--<=0){ s.h=h; s.t=t; return undefined; }
     const c=q[h++], x=c%W;
     for (let k=0;k<4;k++){
       const d=k===0?(x>0?c-1:-1):k===1?(x<W-1?c+1:-1):k===2?(c>=W?c-W:-1):(c<N-W?c+W:-1);
@@ -595,15 +607,17 @@ function routeFrom(p, goal, better, limit){
       if (land[d]){
         if (owner[d]!==p && goal(d)){
           if (!better || better(d)) return path(c,d);
-          if (fc<0){ fc=c; fd=d; stop=Math.min(max,h+extra); }
+          if (s.fc<0){ s.fc=c; s.fd=d; s.stop=Math.min(s.max,h+extra); }
         }
-      } else if (water[d] && par[d]===-2){ par[d]=c; q[t++]=d; }
+      } else if (water[d] && seen[d]!==gen){ seen[d]=gen; par[d]=c; q[t++]=d; }
     }
   }
-  return fc>=0 ? path(fc,fd) : null;
+  return s.fc>=0 ? path(s.fc,s.fd) : null;
 }
+// a whole search at once, for a player's tap. It uses the same working arrays, so a nation's search in progress is dropped.
+function routeFrom(p, goal, better, limit){ G.plan=null; return seaRun(seaStart(p,goal,better,limit),Infinity); }
 function routeTo(p, L){
-  const {M,owner,par,q}=G; par.fill(-2); let h=0,t=0;
+  const {M,owner,par,q}=G; G.plan=null; par.fill(-2); let h=0,t=0;
   for (let k=0;k<4;k++){ const d=nbr(M,L,k); if (d>=0 && M.water[d]){ par[d]=-1; q[t++]=d; } }
   while (h<t){ const c=q[h++];
     for (let k=0;k<4;k++){ const d=nbr(M,c,k); if (d<0) continue;
@@ -635,14 +649,29 @@ function build(p,c,type){
 function pickCell(p,ok){ const g=G; for (let t=0;t<600;t++){ const c=(g.rnd()*g.M.N)|0; if (g.owner[c]===p && !g.bld[c] && ok(c)) return c; } return -1; }
 
 /* ---------- bot turn ---------- */
-function botBoat(P,f,goal){
-  if (boatsOf(P.id)>=2) return false;
-  const amt=Math.floor(P.troops*f); if (amt<2000) return false;
-  // prefer a landing with the target's land behind it, not a one-tile islet
-  const spare=G.grace && (G.tick<G.grace || G.rnd()>G.dm.bias);
+// A computer nation's search for a landing. It is spread over ticks, PLAN_STEP cells of sea at a time, and only one
+// runs at once in the whole game, so no tick carries a whole search. `key` names the kind of target (0 unclaimed
+// land, -1 anyone, else a nation). A search that finds no landing is the dearest kind, running to its cap, so after
+// one a nation waits before looking for that kind again: 30 seconds, doubling each time it fails, up to four minutes.
+const PLAN_STEP=8000;
+function botBoat(P,f,goal,key){
+  const g=G;
+  if (g.plan || boatsOf(P.id)>=2 || Math.floor(P.troops*f)<2000) return false;
+  const spare=g.grace && (g.tick<g.grace || g.rnd()>g.dm.bias);
+  const nb=P.nb||(P.nb={}), k=spare?key+'s':key, w=nb[k]; if (w && g.tick<w.until) return false;
   const ok=c=>goal(c) && !allied(P.id,G.owner[c]) && !(spare && G.players[G.owner[c]].human && P.lastHit!==G.owner[c]);
-  const path=routeFrom(P.id,ok,c=>ownNb(c,G.owner[c])>=2,60000*G.M.sc*G.M.sc); if (!path) return false;
-  sail(P,path,amt); return true;
+  // prefer a landing with the target's land behind it, not a one-tile islet
+  g.plan={P,f,k,s:seaStart(P.id,ok,c=>ownNb(c,G.owner[c])>=2,60000*g.M.sc*g.M.sc)};
+  return true;
+}
+function stepPlan(){
+  const g=G, pl=g.plan; if (!pl) return;
+  const P=pl.P; if (!P.alive){ g.plan=null; return; }
+  const path=seaRun(pl.s,PLAN_STEP); if (path===undefined) return;
+  g.plan=null; const w=P.nb[pl.k];
+  if (!path){ const n=w?w.n+1:1; P.nb[pl.k]={until:g.tick+300*Math.min(8,1<<(n-1)),n}; return; }
+  delete P.nb[pl.k];
+  const amt=Math.floor(P.troops*pl.f); if (amt>=2000 && boatsOf(P.id)<2) sail(P,path,amt);
 }
 function think(P){
   const g=G, p=P.id, fl=P.fl, full=P.troops/capOf(P), owner=g.owner;
@@ -667,28 +696,28 @@ function think(P){
   }
   const anyNeutral=g.players[0].tiles>0, toNeutral=c=>owner[c]===0, toAny=()=>true;
   if (!nb.length && !neutral){
-    if (full>.35 && !(anyNeutral && botBoat(P,.4,toNeutral))){
+    if (full>.35 && !(anyNeutral && botBoat(P,.4,toNeutral,0))){
       const t=weakest(g.players.filter(q=>q.alive && q.id!==p && !allied(p,q.id)),q=>q.troops);
-      (t && botBoat(P,.4,c=>owner[c]===t.id)) || botBoat(P,.4,toAny);
+      (t && botBoat(P,.4,c=>owner[c]===t.id,t.id)) || botBoat(P,.4,toAny,-1);
     }
     return;
   }
-  if (fl.sailor && full>.4 && g.rnd()<.5 && ((anyNeutral && botBoat(P,.3,toNeutral)) || botBoat(P,.3,toAny))) return;
+  if (fl.sailor && full>.4 && g.rnd()<.5 && ((anyNeutral && botBoat(P,.3,toNeutral,0)) || botBoat(P,.3,toAny,-1))) return;
   // anyone finishes off a neighbour that is nearly gone
   const prey=weakest(nb.filter(q=>q.troops<.4*P.troops),q=>q.troops);
   if (prey && full>.3){ order(p,prey.id,Math.min(P.troops*.5,prey.troops*3)); return; }
   // ...and sails after weak nations it cannot reach by land
   if (full>.4 && g.rnd()<.4){
     const far=weakest(g.players.filter(q=>q.alive && q.id!==p && !allied(p,q.id) && q.troops<.4*P.troops),q=>q.tiles);
-    if (far && botBoat(P,Math.min(.4,far.troops*3/P.troops),c=>owner[c]===far.id)) return;
+    if (far && botBoat(P,Math.min(.4,far.troops*3/P.troops),c=>owner[c]===far.id,far.id)) return;
   }
   let o=fl.pick(P,nb,full); if (o && allied(p,o.to)) o=null;
   if (o){
-    if (o.boat) botBoat(P,o.frac,c=>owner[c]===o.to);
+    if (o.boat) botBoat(P,o.frac,c=>owner[c]===o.to,o.to);
     else { order(p,o.to,P.troops*o.frac); if (o.to===P.lastHit) P.lastHit=0; }
     return;
   }
-  if (anyNeutral && !neutral && full>.6 && g.rnd()<.2){ botBoat(P,.25,toNeutral); return; }
+  if (anyNeutral && !neutral && full>.6 && g.rnd()<.2){ botBoat(P,.25,toNeutral,0); return; }
   const w=weakest(nb,q=>q.troops/q.tiles);
   if (w && full>.5 && w.troops/w.tiles<.35*P.troops/P.tiles){ order(p,w.id,P.troops*.4); return; }
   if (full>.9 && w && g.rnd()<.4) order(p,w.id,P.troops*.4);
@@ -722,6 +751,7 @@ function tick(){
   for (const P of g.players) if (P.alive && P.fl && g.tick>=P.next){
     think(P); const [a,b]=g.dm.think; P.next=g.tick+a+((g.rnd()*(b-a))|0);
   }
+  stepPlan();
   if (g.tick%100===0) for (let i=0;i<g.rel.length;i++){ const v=g.rel[i]; if (v) g.rel[i]=v>0?Math.max(0,v-2):Math.min(0,v+2); }
   if (g.tick%10===0) for (let a=1;a<g.n1;a++) for (let b=a+1;b<g.n1;b++){
     const t=g.ally[a*g.n1+b]; if (!t || t>g.tick) continue;
