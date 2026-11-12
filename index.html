@@ -308,7 +308,7 @@ const FL = {
 const DIFF = {easy:{cap:.57,grow:.87,start:14000,think:[40,64],bias:.3}, normal:{cap:.6,grow:.88,start:15000,think:[36,58],bias:.38}, hard:{cap:1,grow:1,start:25000,think:[12,20],bias:1}};
 const GRACE={easy:700,normal:600,hard:50};
 const GOLD=300, GOLD_LAND=2500;                 // gold a tick: a base, plus more the larger your share of the land
-const ALLY_T=3000, REQ_COOL=300, TRAITOR_T=300, RETREAT=.75;
+const ALLY_T=3000, REQ_COOL=300, ASK_T=200, TRAITOR_T=300, RETREAT=.75;
 const COLS = ['#000000','#ffd23f','#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#9a6324','#008080','#bfef45','#fabed4','#800000','#aaffc3','#dcbeff','#808000'];
 
 /* ---------- rules (after OpenFront's EngineConfig) ---------- */
@@ -328,7 +328,7 @@ const fmt = n => n<1000 ? String(Math.round(n)) : n<1e6 ? (n/1000).toFixed(n<100
 /* ---------- game state ---------- */
 let ME = 1, NET = null;                      // my player id; the connection when playing over the network
 const SPAWN_T = 100, NET_SUB = 4;           // network games: ticks to choose a start, and sub-steps per tick
-let G = null, speed = 1, paused = true, armed = 0, popCell = -1, natCell = -1, tapX = 0, tapY = 0, pressT = 0;
+let G = null, speed = 1, paused = true, armed = 0, popCell = -1, natCell = -1, natWho = 0, askFrom = 0, answered = {}, tapX = 0, tapY = 0, pressT = 0;
 const save = (() => { try { return JSON.parse(localStorage.getItem('landmark.v1')) || {}; } catch(e){ return {}; } })();
 save.diff = save.diff || 'easy'; save.wins = save.wins || {}; save.bots = save.bots || 6;
 const persist = () => { try { localStorage.setItem('landmark.v1', JSON.stringify(save)); } catch(e){} };
@@ -340,13 +340,14 @@ function newGame(M, diff, seed, nbots, humans){
   const keys = Object.keys(FL), nat = M.nations.slice();
   for (let i=keys.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [keys[i],keys[j]]=[keys[j],keys[i]]; }
   for (let i=nat.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [nat[i],nat[j]]=[nat[j],nat[i]]; }
-  const mk = (id,name,x) => Object.assign({id,name,tiles:0,troops:0,gold:0,alive:false,lastHit:0,cities:0,forts:[],traitor:0,ask:null,spawned:false},x);
+  const mk = (id,name,x) => Object.assign({id,name,tiles:0,troops:0,gold:0,alive:false,lastHit:0,cities:0,forts:[],traitor:0,asks:[],spawned:false},x);
   const players = [mk(0,'',{tiles:M.total})];
   humans.forEach((nm,i)=>players.push(mk(i+1,nm,{human:true})));
   const H = humans.length;
   G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],tick:0,aid:0,phase:'spawn',
        stamp:new Int32Array(M.N),mark:new Uint8Array(M.N),par:new Int32Array(M.N),q:new Int32Array(M.N),
        dirty:[],dflag:new Uint8Array(M.N),redraw:true,grace:0,fx:[],mp:false};
+  answered = {};
   // nations start apart from each other
   const picked = [];
   for (const gap of [.16,.1,.06,.03]) for (const n of nat){
@@ -480,6 +481,7 @@ const isUser = P => P.human && !P.fl;
 function makeAlly(a,b){
   const g=G, t=g.tick+ALLY_T; g.ally[a*g.n1+b]=g.ally[b*g.n1+a]=t; addRel(a,b,50); addRel(b,a,50);
   for (const x of g.attacks) if (!x.dead && ((x.from===a && x.to===b) || (x.from===b && x.to===a))) endAttack(x);
+  const A=g.players[a], B=g.players[b]; A.asks=A.asks.filter(x=>x.from!==b); B.asks=B.asks.filter(x=>x.from!==a);
   if (a===ME || b===ME) toast('🤝 '+g.players[a===ME?b:a].name);
 }
 function breakAlly(p,q){
@@ -504,11 +506,20 @@ function wantsAlly(B,O){
   if (g.tick<(d==='easy'?3000:1800)) return true;
   return O.troops>=B.troops*.6;
 }
+// A person keeps every request made to them until they answer it or it runs out; a new one never replaces another.
 function request(p,q){
-  const g=G, i=p*g.n1+q; if (g.cool[i]>g.tick || allied(p,q)) return;
+  const g=G, i=p*g.n1+q, P=g.players[p], Q=g.players[q]; if (allied(p,q)) return;
+  if (P.asks.some(a=>a.from===q)){ makeAlly(q,p); return; }           // they had already asked me: this is my yes
+  if (g.cool[i]>g.tick) return;
   g.cool[i]=g.tick+REQ_COOL;
-  const P=g.players[p], Q=g.players[q];
-  if (isUser(Q)){ Q.ask={from:p,until:g.tick+200}; return; }
+  if (isUser(Q)){
+    Q.asks=Q.asks.filter(a=>a.from!==p);
+    const a={from:p,until:g.tick+ASK_T};
+    if (isUser(P)){ let k=0; while (k<Q.asks.length && isUser(g.players[Q.asks[k].from])) k++; Q.asks.splice(k,0,a); }   // people ahead of computer nations
+    else Q.asks.push(a);
+    if (p===ME) toast('✉ '+Q.name);
+    return;
+  }
   if (wantsAlly(Q,P)) makeAlly(p,q); else if (p===ME) toast('✕ '+Q.name);
 }
 function retreat(a){ if (a.dead) return; a.dead=true; const A=G.players[a.from]; if (A.alive) A.troops+=a.troops*RETREAT; a.troops=0; }
@@ -717,7 +728,11 @@ function tick(){
     g.ally[a*g.n1+b]=g.ally[b*g.n1+a]=0;
     if (a===ME || b===ME){ const Q=g.players[a===ME?b:a]; if (Q.alive) toast('⏳ '+Q.name); }
   }
-  for (const P of g.players) if (P.ask && (g.tick>P.ask.until || !g.players[P.ask.from].alive)) P.ask=null;
+  for (const P of g.players) if (P.asks.length) P.asks=P.asks.filter(a=>{
+    if (g.tick<=a.until && P.alive && g.players[a.from].alive) return true;
+    if (a.from===ME && P.alive) toast('✕ '+P.name);                 // my request ran out unanswered
+    return false;
+  });
   g.attacks=g.attacks.filter(a=>!a.dead); g.boats=g.boats.filter(b=>!b.dead);
   for (const P of g.players) if (P.human && P.alive && P.tiles===0) eliminate(P,P);
   const me=g.players[ME];
@@ -767,8 +782,9 @@ function apply(p,it){
     case 'tap': if (P.alive && cell(it.c)) doTap(p,it.c,+it.f,!!it.boat); break;
     case 'build': if (P.alive && cell(it.c) && (it.t===1 || it.t===2)) build(p,it.c,it.t); break;
     case 'req': if (P.alive && Number.isInteger(it.q) && it.q>0 && it.q<g.n1 && it.q!==p && g.players[it.q].alive) request(p,it.q); break;
-    case 'yes': if (P.ask){ const f=P.ask.from; P.ask=null; if (P.alive && g.players[f].alive) makeAlly(f,p); } break;
-    case 'no': if (P.ask){ addRel(P.ask.from,p,-10); P.ask=null; } break;
+    // the answer names who it is for, so it can never land on a different request
+    case 'yes': if (P.alive && P.asks.some(a=>a.from===it.q) && g.players[it.q].alive) makeAlly(it.q,p); break;
+    case 'no': if (P.asks.some(a=>a.from===it.q)){ P.asks=P.asks.filter(a=>a.from!==it.q); addRel(it.q,p,-10); if (it.q===ME) toast('✕ '+P.name); } break;
     case 'break': if (Number.isInteger(it.q) && allied(p,it.q)) breakAlly(p,it.q); break;
     case 'retreat': { const a=g.attacks.find(a=>a.id===it.a && a.from===p); if (a) retreat(a); } break;
   }
@@ -921,7 +937,9 @@ function hud(){
   const sea=boatsOf(ME); if (sea) out.push('⛵ '+sea);
   const inc=g.attacks.filter(a=>a.to===ME).map(a=>'<b>← '+g.players[a.from].name+' '+fmt(a.troops)+'</b>');
   $('atk').innerHTML=inc.concat(out).join(' ');
-  const ask=me.ask; $('ask').classList.toggle('hidden',!ask); if (ask) $('ask').firstElementChild.textContent='🤝 '+g.players[ask.from].name;
+  const ask=me.alive && me.asks.find(a=>answered[a.from]!==a.until); askFrom=ask?ask.from:0;      // one I have answered stays off the bar
+  $('ask').classList.toggle('hidden',!ask); if (ask) $('ask').firstElementChild.textContent='🤝 '+g.players[ask.from].name;
+  if (natWho) natState();
 }
 let toastT=0;
 function toast(s){ if (G && G.silent) return; const t=$('toast'); t.textContent=s; t.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'),2200); }
@@ -968,7 +986,7 @@ cv.addEventListener('contextmenu',e=>{ e.preventDefault(); clearTimeout(pressT);
 cv.addEventListener('pointermove',e=>{
   const p=pts.get(e.pointerId); if (!p || !G) return;
   if (pts.size===1){
-    if (!moved && Math.hypot(e.clientX-sx,e.clientY-sy)>8){ moved=true; clearTimeout(pressT); }
+    if (!moved && Math.hypot(e.clientX-sx,e.clientY-sy)>12){ moved=true; clearTimeout(pressT); }
     if (moved){ V.x+=e.clientX-p.x; V.y+=e.clientY-p.y; }
   } else if (pts.size===2){
     const o=[...pts.entries()].find(([id])=>id!==e.pointerId)[1];
@@ -1015,14 +1033,29 @@ const myName = () => clean(save.name);
 function arm(t){ const me=G.players[ME]; armed=(armed===t || me.gold<(t===1?cityCost:fortCost)(me))?0:t; hud(); }
 // tapping your own land offers what can be built there
 function openPop(c){ if (G.bld[c]) return; popCell=c; const e=$('pop'); e.style.left=within(tapX,90,cw-90)+'px'; e.style.top=Math.max(110,tapY)+'px'; e.classList.remove('hidden'); hud(); }
-function closePop(){ popCell=-1; natCell=-1; $('pop').classList.add('hidden'); $('nat').classList.add('hidden'); }
+function closePop(){ popCell=-1; natCell=-1; natWho=0; $('pop').classList.add('hidden'); $('nat').classList.add('hidden'); }
 // long-press (or right-click, or a tap on an ally): the nation's card
 function openNat(c){
   const o=G.owner[c]; if (o<1 || o===ME) return; const Q=G.players[o];
-  natCell=c; popCell=c; const e=$('nat'); e.style.left=within(tapX,90,cw-90)+'px'; e.style.top=Math.max(130,tapY)+'px';
+  natCell=c; popCell=c; natWho=o; const e=$('nat'); e.style.left=within(tapX,90,cw-90)+'px'; e.style.top=Math.max(130,tapY)+'px';
+  natState(); e.classList.remove('hidden');
+}
+// the card belongs to the nation it was opened on, wherever the borders have moved since
+function natState(){
+  const o=natWho, Q=G.players[o]; if (!Q.alive){ closePop(); return; }
   $('natH').innerHTML='<i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+COLS[o]+'"></i> <b>'+Q.name+'</b><br>'+fmt(Q.troops)+' · ● '+fmt(Q.gold)+(Q.traitor>G.tick?' · 💔':'');
-  const al=allied(ME,o); $('nAlly').textContent=al?'💔':'🤝'; $('nAlly').disabled=!al && G.cool[ME*G.n1+o]>G.tick; $('nBoat').disabled=al;
-  e.classList.remove('hidden');
+  const al=allied(ME,o), asked=G.players[ME].asks.some(a=>a.from===o);
+  $('nAlly').textContent=al?'💔':'🤝'; $('nAlly').disabled=!al && !asked && G.cool[ME*G.n1+o]>G.tick; $('nBoat').disabled=al;
+}
+// a cell of nation o at or near c
+function cellOf(o,c){
+  const {M,owner}=G; if (owner[c]===o) return c;
+  const x=c%M.W, y=(c/M.W)|0; let best=-1, bd=1e9;
+  for (let dy=-40;dy<=40;dy++) for (let dx=-40;dx<=40;dx++){
+    const X=x+dx, Y=y+dy; if (X<0||Y<0||X>=M.W||Y>=M.H) continue;
+    const d=dx*dx+dy*dy; if (d<bd && owner[Y*M.W+X]===o){ bd=d; best=Y*M.W+X; }
+  }
+  return best;
 }
 function longPress(x,y){
   if (!G || G.phase!=='play' || !G.players[ME].alive) return; tapX=x; tapY=y;
@@ -1106,10 +1139,11 @@ $('ratio').addEventListener('input',()=>{ $('rv').textContent=$('ratio').value+'
 $('bCity').addEventListener('click',()=>{ act({k:'build',c:popCell,t:1}); closePop(); }); $('bFort').addEventListener('click',()=>{ act({k:'build',c:popCell,t:2}); closePop(); });
 $('zin').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1.6); clampView(); } }); $('zout').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1/1.6); clampView(); } });
 $('aCity').addEventListener('click',()=>arm(1)); $('aFort').addEventListener('click',()=>arm(2));
-$('nAlly').addEventListener('click',()=>{ const o=G.owner[natCell]; if (o>0 && o!==ME) act(allied(ME,o)?{k:'break',q:o}:{k:'req',q:o}); closePop(); });
-$('nBoat').addEventListener('click',()=>{ const c=natCell; closePop(); if (c>=0 && G.owner[c]!==ME) tapCell(c,true); });
-$('askY').addEventListener('click',()=>{ act({k:'yes'}); $('ask').classList.add('hidden'); });
-$('askN').addEventListener('click',()=>{ act({k:'no'}); $('ask').classList.add('hidden'); });
+$('nAlly').addEventListener('click',()=>{ const o=natWho; if (o>0 && o!==ME && G.players[o].alive) act(allied(ME,o)?{k:'break',q:o}:{k:'req',q:o}); closePop(); });
+$('nBoat').addEventListener('click',()=>{ const o=natWho, c=o>0 && natCell>=0 ? cellOf(o,natCell) : -1; closePop(); if (c>=0) tapCell(c,true); });
+function answer(k){ const a=G.players[ME].asks.find(a=>a.from===askFrom); if (!a) return; answered[a.from]=a.until; act({k,q:a.from}); hud(); }
+$('askY').addEventListener('click',()=>answer('yes'));
+$('askN').addEventListener('click',()=>answer('no'));
 $('atk').addEventListener('pointerdown',e=>{ const b=e.target.closest('button'); if (!b) return; act({k:'retreat',a:+b.dataset.a}); hud(); });
 $('speed').addEventListener('click',()=>{ speed=speed===1?2:speed===2?4:1; $('speed').textContent='×'+speed; });
 $('menuBtn').addEventListener('click',()=>{ buildMenu(); paused=true; $('menu').classList.remove('hidden'); });
