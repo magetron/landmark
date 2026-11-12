@@ -1062,6 +1062,13 @@ function draw(){
     ctx.lineCap='round'; ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=5; ctx.stroke(); ctx.strokeStyle='#ffb347'; ctx.lineWidth=3; ctx.stroke(); ctx.lineCap='butt';
     ctx.beginPath(); ctx.arc(ax(k),ay(k),5.5+2.5*m.w,0,6.3); ctx.fillStyle=COLS[m.p]; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
   }
+  if (armed>=3 && sight){
+    const c=cellAt(sight.x,sight.y), o=c>=0?owner[c]:0, ok=o>0 && o!==ME && !allied(ME,o);
+    const x=c>=0?V.x+(c%W+.5)*V.s:sight.x, y=c>=0?V.y+(((c/W)|0)+.5)*V.s:sight.y;
+    ctx.beginPath(); ctx.arc(x,y,Math.round(ARMS[armed-3].r*Math.sqrt(M.k))*V.s,0,6.3);
+    ctx.fillStyle=ok?'rgba(255,60,40,.14)':'rgba(255,255,255,.1)'; ctx.fill();
+    ctx.setLineDash([6,4]); ctx.strokeStyle=ok?'#ff4a34':'rgba(255,255,255,.75)'; ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([]);
+  }
   g.fx=g.fx.filter(f=>now-f.t<(f.d||450));
   for (const f of g.fx){
     const k=(now-f.t)/(f.d||450), x=V.x+f.x*V.s, y=V.y+f.y*V.s;
@@ -1150,17 +1157,27 @@ function frame(ts){
 
 /* ---------- input ---------- */
 const pts=new Map(); let moved=false, sx=0, sy=0, swallow=false;
+// With a weapon armed, a press on the map aims it: the blast circle sits under the finger and follows it, the map
+// does not pan, and lifting fires there. `sight` is where the pointer is; a mouse shows the circle as it hovers.
+let sight=null, aiming=false;
 cv.addEventListener('pointerdown',e=>{
   swallow=popCell>=0 || !$('arms').classList.contains('hidden'); closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
   pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); clearTimeout(pressT);
-  if (pts.size===1){ moved=false; sx=e.clientX; sy=e.clientY; const x=sx, y=sy; pressT=setTimeout(()=>{ if (pts.size===1 && !moved){ swallow=true; longPress(x,y); } },450); } else moved=true;
+  if (pts.size===1){
+    moved=false; sx=e.clientX; sy=e.clientY; aiming=armed>=3 && !swallow;
+    if (aiming) sight={x:sx,y:sy};
+    else { const x=sx, y=sy; pressT=setTimeout(()=>{ if (pts.size===1 && !moved){ swallow=true; longPress(x,y); } },450); }
+  } else { moved=true; aiming=false; sight=null; }
 });
 cv.addEventListener('contextmenu',e=>{ e.preventDefault(); clearTimeout(pressT); swallow=true; longPress(e.clientX,e.clientY); });
 cv.addEventListener('pointermove',e=>{
-  const p=pts.get(e.pointerId); if (!p || !G) return;
+  const p=pts.get(e.pointerId);
+  if (!p){ sight=armed>=3 && e.pointerType==='mouse' ? {x:e.clientX,y:e.clientY} : null; return; }
+  if (!G) return;
   if (pts.size===1){
     if (!moved && Math.hypot(e.clientX-sx,e.clientY-sy)>12){ moved=true; clearTimeout(pressT); }
-    if (moved){ V.x+=e.clientX-p.x; V.y+=e.clientY-p.y; }
+    if (aiming) sight={x:e.clientX,y:e.clientY};
+    else if (moved){ V.x+=e.clientX-p.x; V.y+=e.clientY-p.y; }
   } else if (pts.size===2){
     const o=[...pts.entries()].find(([id])=>id!==e.pointerId)[1];
     const d0=Math.hypot(p.x-o.x,p.y-o.y), d1=Math.hypot(e.clientX-o.x,e.clientY-o.y);
@@ -1173,10 +1190,12 @@ cv.addEventListener('pointermove',e=>{
 const up=e=>{
   clearTimeout(pressT);
   if (!pts.has(e.pointerId)) return;
-  const tap=pts.size===1 && !moved && e.type==='pointerup'; pts.delete(e.pointerId);
+  const tap=pts.size===1 && (aiming || !moved) && e.type==='pointerup'; pts.delete(e.pointerId);
+  if (aiming || e.pointerType!=='mouse') sight=null;
+  aiming=false;
   if (tap && G && !swallow){ tapX=e.clientX; tapY=e.clientY; G.fx.push({x:(tapX-V.x)/V.s,y:(tapY-V.y)/V.s,t:performance.now()}); tapAt(e.clientX,e.clientY); }
 };
-cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up);
+cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up); cv.addEventListener('pointerleave',()=>{ if (!pts.size) sight=null; });
 cv.addEventListener('wheel',e=>{ e.preventDefault(); if (G){ zoomAt(e.clientX,e.clientY,e.deltaY<0?1.2:1/1.2); clampView(); } },{passive:false});
 function zoomAt(x,y,k){ const s=within(V.s*k,V.min,maxZoom()); k=s/V.s; V.x=x-(x-V.x)*k; V.y=y-(y-V.y)*k; V.s=s; }
 function tapAt(x,y){ const c=cellAt(x,y); if (c>=0) tapCell(c); }
