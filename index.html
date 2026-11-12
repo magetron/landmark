@@ -325,6 +325,8 @@ const POST_MAG=5, POST_SPEED=3, POST_R=8, CITY_TROOPS=250000;
 // weapons bought with gold: price, blast radius in cells on the world map (wider on bigger maps), and the share
 // of its troops a nation loses per share of its land hit. Both fly MISSILE_V cells a tick.
 const ARMS=[{name:'Missile',ico:'🚀',cost:150000,r:10,kill:2},{name:'Nuke',ico:'☢️',cost:750000,r:26,kill:2}], MISSILE_V=6;
+// after a blast the land inside the circle is scorched: nobody can claim it for this many ticks
+const SCORCH=250;
 let LOSS=5, LOSSP=2.5, PACE=1.2;                               // rescale for quarter-size grids
 const within=(v,a,b)=>Math.max(a,Math.min(b,v));
 // pow, exp and log may differ in the last bit between browsers; rounding to 32 bits keeps every device in step
@@ -355,7 +357,7 @@ function newGame(M, diff, seed, nbots, humans){
   const players = [mk(0,'',{tiles:M.total})];
   humans.forEach((nm,i)=>players.push(mk(i+1,nm,{human:true})));
   const H = humans.length;
-  G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],missiles:[],tick:0,aid:0,phase:'spawn',
+  G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],missiles:[],burn:new Int32Array(M.N),burns:[],burnEnd:0,tick:0,aid:0,phase:'spawn',
        stamp:new Int32Array(M.N),mark:new Uint8Array(M.N),par:new Int32Array(M.N),q:new Int32Array(M.N),seen:new Int32Array(M.N),gen:0,plan:null,
        dirty:[],dflag:new Uint8Array(M.N),redraw:true,grace:0,fx:[],mp:false};
   answered = {};
@@ -426,10 +428,12 @@ function reach(M,c,k){
   for (let i=0;i<=M.ford;i++){ d=nbr(M,d,k); if (d<0) return -1; if (M.land[d]) return d; if (!M.water[d]) return -1; }
   return -1;
 }
+const hot = c => G.burn[c]>G.tick;
 function ownNb(c,p){ const {M,owner}=G; let n=0; for (let k=0;k<4;k++){ const d=nbr(M,c,k); if (d>=0 && M.land[d] && owner[d]===p) n++; } return n; }
 function touches(c,p){ const {M,owner}=G; for (let k=0;k<4;k++){ const d=reach(M,c,k); if (d>=0 && owner[d]===p) return true; } return false; }
-function scanFront(a){
-  const {M,owner,stamp,blk,bw,bh}=G, B=M.blk, W=M.W, H=M.H; a.front.length=0;
+// the cells of a.to that a.from's land touches. With `probe`, only says whether there is one.
+function scanFront(a,probe){
+  const {M,owner,stamp,blk,bw,bh}=G, B=M.blk, W=M.W, H=M.H; if (!probe) a.front.length=0;
   // only look inside blocks where the target has land and the attacker has land in or beside them
   const T=a.to*bh*bw, F=a.from*bh*bw;
   for (let by=0;by<bh;by++) for (let bx=0;bx<bw;bx++){
@@ -438,9 +442,12 @@ function scanFront(a){
     for (let j=-1;j<=1 && !near;j++) for (let i=-1;i<=1;i++){ const x=bx+i, y=by+j; if (x>=0 && y>=0 && x<bw && y<bh && blk[F+y*bw+x]){ near=true; break; } }
     if (!near) continue;
     const x1=Math.min(W,(bx+1)*B), y1=Math.min(H,(by+1)*B);
-    for (let y=by*B;y<y1;y++) for (let x=bx*B;x<x1;x++){ const c=y*W+x; if (M.land[c] && owner[c]===a.to && touches(c,a.from)){ a.front.push(c); stamp[c]=a.id; } }
+    for (let y=by*B;y<y1;y++) for (let x=bx*B;x<x1;x++){ const c=y*W+x; if (M.land[c] && owner[c]===a.to && !hot(c) && touches(c,a.from)){ if (probe) return true; a.front.push(c); stamp[c]=a.id; } }
   }
+  return false;
 }
+// is there unclaimed land beside p's that p could take now? (adj counts scorched land too)
+const openTo = p => G.adj[p*G.n1]>0 && (G.tick>=G.burnEnd || scanFront({from:p,to:0},true));
 function take(c,p,a){
   const {M,owner,players,stamp}=G;
   give(c,p);
@@ -451,11 +458,11 @@ function take(c,p,a){
       let lone=true; for (let j=0;j<4;j++){ const e=nbr(M,d,j); if (e>=0 && M.land[e] && owner[e]!==p){ lone=false; break; } }
       if (lone){ give(d,p); continue; }
     }
-    if (a && o===a.to && stamp[d]!==a.id){ stamp[d]=a.id; a.front.push(d); }
+    if (a && o===a.to && stamp[d]!==a.id && !hot(d)){ stamp[d]=a.id; a.front.push(d); }
   }
   if (a) for (let k=0;k<4;k++){
     const d=nbr(M,c,k); if (d<0 || !M.water[d]) continue;
-    const e=reach(M,c,k); if (e>=0 && owner[e]===a.to && stamp[e]!==a.id){ stamp[e]=a.id; a.front.push(e); }
+    const e=reach(M,c,k); if (e>=0 && owner[e]===a.to && stamp[e]!==a.id && !hot(e)){ stamp[e]=a.id; a.front.push(e); }
   }
 }
 // OpenFront's attackLogic for one tile: sets R.aLoss, R.dLoss, R.frac (share of a tick)
@@ -575,7 +582,7 @@ function runAttack(a,f){
     let i=-1, bs=-1; const F=a.front;
     for (let t=0;t<3;t++){ const j=(g.rnd()*F.length)|0, s=ownNb(F[j],a.from)*4-g.M.terr[F[j]]; if (s>bs){ bs=s; i=j; } }
     const c=F[i]; F[i]=F[F.length-1]; F.pop(); g.stamp[c]=0;
-    if (g.owner[c]!==a.to || (bs<2 && !touches(c,a.from))) continue;
+    if (g.owner[c]!==a.to || hot(c) || (bs<2 && !touches(c,a.from))) continue;
     tileLogic(c,A,D,a.to,a.troops,Math.max(8,F.length+1));
     if (a.troops<R.aLoss){ endAttack(a); return; }
     a.troops-=R.aLoss; a.budget-=R.frac; if (a.to>0) D.troops-=R.dLoss;
@@ -641,7 +648,7 @@ function sail(P,path,amt){ P.troops-=amt; G.boats.push({p:P.id,path,i:0,troops:a
 function landBoat(b){
   const g=G, P=g.players[b.p], c=b.path[b.path.length-1], o=g.owner[c];
   if (!P.alive) return;
-  if (o===b.p || allied(b.p,o)){ P.troops+=b.troops; return; }
+  if (o===b.p || allied(b.p,o) || hot(c)){ P.troops+=b.troops; return; }
   const D=g.players[o]; tileLogic(c,P,D,o,b.troops,1);
   if (b.troops<R.aLoss) return;
   if (o>0){ D.troops-=R.dLoss; if (o===ME && !P.human) toast('⛵ '+P.name); }
@@ -668,19 +675,24 @@ function launch(p,c,w){
   if (o===ME) toast(A.ico+' '+P.name);
 }
 // It lands: inside the circle, land that is not the sender's or an ally's goes back to unclaimed, buildings on it
-// are gone, and each nation hit loses troops by the share of its land it lost.
+// are gone, and each nation hit loses troops by the share of its land it lost. All the unclaimed land in the circle
+// is then scorched for SCORCH ticks.
 function blast(m){
   const g=G, {M,owner}=g, {W,H}=M, P=g.players[m.p], R=m.r, x0=m.c%W, y0=(m.c/W)|0;
   if (!P.alive) return;
-  const lost=new Int32Array(g.n1), had=g.players.map(D=>D.tiles);
+  const lost=new Int32Array(g.n1), had=g.players.map(D=>D.tiles), until=g.tick+SCORCH, cells=[];
   for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++){
     if (dx*dx+dy*dy>R*R) continue;
     const X=x0+dx, Y=y0+dy; if (X<0||Y<0||X>=W||Y>=H) continue;
-    const c=Y*W+X, o=owner[c]; if (o===0 || o===m.p || allied(m.p,o)) continue;
-    const b=g.bld[c];
-    if (b){ const D=g.players[o]; if (b===1) D.cities--; else D.forts.splice(D.forts.indexOf(c),1); g.bld[c]=0; g.blds.splice(g.blds.indexOf(c),1); }
-    give(c,0); lost[o]++;
+    const c=Y*W+X, o=owner[c]; if (!M.land[c] || o===m.p || allied(m.p,o)) continue;
+    if (o){
+      const b=g.bld[c];
+      if (b){ const D=g.players[o]; if (b===1) D.cities--; else D.forts.splice(D.forts.indexOf(c),1); g.bld[c]=0; g.blds.splice(g.blds.indexOf(c),1); }
+      give(c,0); lost[o]++;
+    }
+    g.burn[c]=until; cells.push(c); touch(c);
   }
+  g.burns.push({until,cells}); g.burnEnd=until;
   for (let o=1;o<g.n1;o++) if (lost[o]){
     const D=g.players[o];
     D.troops-=D.troops*Math.min(1,ARMS[m.w].kill*lost[o]/had[o]);
@@ -702,7 +714,7 @@ function botBoat(P,f,goal,key){
   if (g.plan || boatsOf(P.id)>=2 || Math.floor(P.troops*f)<2000) return false;
   const spare=g.grace && (g.tick<g.grace || g.rnd()>g.dm.bias);
   const nb=P.nb||(P.nb={}), k=spare?key+'s':key, w=nb[k]; if (w && g.tick<w.until) return false;
-  const ok=c=>goal(c) && !allied(P.id,G.owner[c]) && !(spare && G.players[G.owner[c]].human && P.lastHit!==G.owner[c]);
+  const ok=c=>goal(c) && !hot(c) && !allied(P.id,G.owner[c]) && !(spare && G.players[G.owner[c]].human && P.lastHit!==G.owner[c]);
   // prefer a landing with the target's land behind it, not a one-tile islet
   g.plan={P,f,k,s:seaStart(P.id,ok,c=>ownNb(c,G.owner[c])>=2,60000*g.M.sc*g.M.sc)};
   return true;
@@ -726,7 +738,7 @@ function think(P){
     if (Q && !allied(p,Q.id) && relOf(p,Q.id)>=0 && wantsAlly(P,Q)) request(p,Q.id);
   }
   for (const Q of alliesOf(p)) if (P.troops>=Q.troops*(fl.betray||10) && !(g.diff==='easy' && isUser(Q))) breakAlly(p,Q.id);
-  const neutral=g.adj[p*g.n1]>0, mine=g.attacks.filter(a=>!a.dead && a.from===p);
+  const neutral=openTo(p), mine=g.attacks.filter(a=>!a.dead && a.from===p);
   if (P.lastHit && g.players[P.lastHit].alive && P.forts.length<3 && P.gold>=fortCost(P) && g.rnd()<(fl===FL.tortoise?.8:.3)){
     const c=pickCell(p,c=>touches(c,P.lastHit)); if (c>=0) build(p,c,2);
   }
@@ -799,6 +811,7 @@ function tick(){
     for (const m of g.missiles) if (g.tick>=m.at){ m.dead=true; blast(m); }
     g.missiles=g.missiles.filter(m=>!m.dead);
   }
+  while (g.burns.length && g.tick>=g.burns[0].until) for (const c of g.burns.shift().cells) if (!hot(c)) touch(c);      // scorched land clears: paint it again
   if (g.tick%100===0) for (let i=0;i<g.rel.length;i++){ const v=g.rel[i]; if (v) g.rel[i]=v>0?Math.max(0,v-2):Math.min(0,v+2); }
   if (g.tick%10===0) for (let a=1;a<g.n1;a++) for (let b=a+1;b<g.n1;b++){
     const t=g.ally[a*g.n1+b]; if (!t || t>g.tick) continue;
@@ -880,21 +893,22 @@ function byLand(p,c,o){
     const s=q[h];
     for (let k=0;k<4;k++){ const d=reach(M,s,k); if (d<0) continue;
       if (owner[d]===p) return true;
-      if (owner[d]===o && seen[d]!==gen){ seen[d]=gen; q.push(d); } }
+      if (owner[d]===o && seen[d]!==gen && !hot(d)){ seen[d]=gen; q.push(d); } }
   }
   return false;
 }
-// send a share f of p's troops at the land under cell c: by land if an attack by land can get there, else by boat
+// send a share f of p's troops at the land under cell c: by land if an attack by land can get there, else by boat.
+// Scorched land is no target, and nothing walks over it.
 function doTap(p,c,f,byBoat){
-  const g=G, {M,owner,mark}=g, P=g.players[p]; if (!M.land[c]) return;
+  const g=G, {M,owner,mark}=g, P=g.players[p]; if (!M.land[c] || hot(c)) return;
   const o=owner[c], amt=Math.floor(P.troops*within(f||0,.05,1));
-  if (o===p){ if (g.adj[p*g.n1]>0 && amt>=100) order(p,0,amt); return; }
+  if (o===p){ if (amt>=100 && openTo(p)) order(p,0,amt); return; }
   if (allied(p,o) || amt<100) return;
   // flood the tapped region: does it touch p's land?
   mark.fill(0); const st=[c], coast=[]; mark[c]=1; let touch=false;
   while (st.length){ const s=st.pop(); let sea=false;
     for (let k=0;k<4;k++){ const d=nbr(M,s,k); if (d<0) continue;
-      if (M.water[d]){ sea=true; const e=reach(M,s,k); if (e>=0 && owner[e]===p) touch=true; } else if (!M.land[d]) continue; else if (owner[d]===p) touch=true; else if (owner[d]===o && !mark[d]){ mark[d]=1; st.push(d); } }
+      if (M.water[d]){ sea=true; const e=reach(M,s,k); if (e>=0 && owner[e]===p) touch=true; } else if (!M.land[d]) continue; else if (owner[d]===p) touch=true; else if (owner[d]===o && !mark[d] && !hot(d)){ mark[d]=1; st.push(d); } }
     if (sea) coast.push(s); }
   if (!byBoat && (touch || byLand(p,c,o))){ order(p,o,amt); return; }
   if (boatsOf(p)>=3) return;
@@ -914,7 +928,7 @@ function tapCell(c,byBoat){
   if (g.phase!=='play' || !me.alive) return;
   if (armed){ if (armed>=3){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-3}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
   // while there is unclaimed land next to you a tap on your own land pushes into it; the bar buttons build
-  if (o===ME && !(g.adj[ME*g.n1]>0)){ if (!g.bld[c] && me.gold>=Math.min(cityCost(me),fortCost(me))) openPop(c); return; }
+  if (o===ME && !openTo(ME)){ if (!g.bld[c] && me.gold>=Math.min(cityCost(me),fortCost(me))) openPop(c); return; }
   if (o!==ME && allied(ME,o)){ openNat(c); return; }
   act({k:'tap',c,f:$('ratio').value/100,boat:!!byBoat});
 }
@@ -931,7 +945,7 @@ const ALPHA=151, BORDER=COLS.map((h,i)=>((255<<24)|(((CB[i]*.72)|0)<<16)|(((CG[i
 // one cell: terrain, or the owner's colour laid over the terrain at 59%, or a solid border
 function paint(c){
   const {M,owner}=G, b=M.base[c], o=owner[c];
-  if (!o){ px[c]=b; return; }
+  if (!o){ px[c]=hot(c) ? (255<<24)|(((((b>>16)&255)*80>>8)+12)<<16)|(((((b>>8)&255)*86>>8)+14)<<8)|(((b&255)*96>>8)+22) : b; return; }
   for (let k=0;k<4;k++){ const d=nbr(M,c,k); if (d<0 || !M.land[d] || owner[d]!==o){ px[c]=BORDER[o]; return; } }
   const r=((b&255)*(256-ALPHA)+CR[o]*ALPHA)>>8, g=(((b>>8)&255)*(256-ALPHA)+CG[o]*ALPHA)>>8, bl=(((b>>16)&255)*(256-ALPHA)+CB[o]*ALPHA)>>8;
   px[c]=(255<<24)|(bl<<16)|(g<<8)|r;
