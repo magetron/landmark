@@ -25,7 +25,10 @@ canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:b
 #bar .in{max-width:560px;margin:0 auto}
 #atk{height:22px;font-size:12px;color:#b6c2cf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #atk b{color:#ff8a8a;font-weight:600}
-#meter{position:relative;height:20px;background:#0006;border-radius:10px;overflow:hidden;margin:3px 0 6px}
+#res{margin:3px 0 6px;gap:8px}
+#meter{position:relative;flex:1;height:20px;background:#0006;border-radius:10px;overflow:hidden}
+#gd{font-size:14px;font-weight:700;color:#ffd23f;white-space:nowrap;line-height:20px}
+#gd i{font-style:normal;font-weight:600;font-size:11px;color:#b9a25a;margin-left:5px}
 #fill{position:absolute;left:0;top:0;bottom:0;width:0;background:#3f8f5a}
 #mtxt{position:absolute;inset:0;display:flex;justify-content:space-between;padding:0 10px;font-size:12px;line-height:20px;font-weight:600}
 .row{display:flex;gap:6px;align-items:center}
@@ -35,10 +38,13 @@ button:active{background:#3a4452}
 button.on{background:#ffd23f;color:#111;border-color:#ffd23f;font-weight:700}
 #ratio{flex:1;min-width:60px;accent-color:#ffd23f;height:28px}
 #rv{width:40px;font-weight:700;font-size:13px}
-#speed,#menuBtn{min-width:44px;padding:11px 0}
-button.bld{padding:11px 7px;font-size:12px;white-space:nowrap;min-width:62px;color:#b9c6d6}
+#menuBtn{min-width:44px;padding:11px 0}
+#zoom #speed{font-size:14px;font-weight:700}
+button.bld{padding:11px 6px;font-size:12px;white-space:nowrap;min-width:0;color:#b9c6d6}
+button.bld span{color:#ffd23f;font-weight:700}
+button.bld i{font-style:normal}
 button.bld.ready{color:#fff;border-color:#ffd23f}
-button.bld.on{color:#111}
+button.bld.on,button.bld.on span{color:#111}
 #ask{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(120px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center;
   background:#14181ef2;border:1px solid #fff4;border-radius:16px;padding:6px 8px 6px 14px;box-shadow:0 4px 14px #0008;font-weight:700;white-space:nowrap;z-index:4}
 #ask.hidden,#nat.hidden{display:none}
@@ -49,10 +55,11 @@ button.bld.on{color:#111}
 #atk button{font-size:12px;padding:1px 8px;min-width:0;border-radius:9px;margin-right:4px;background:#2a313b}
 #pop{position:fixed;display:flex;gap:8px;transform:translate(-50%,-115%);z-index:5}
 #pop.hidden{display:none}
-#pop button{width:74px;padding:8px 0 6px;border-radius:14px;background:#14181ef2;border:1px solid #fff4;box-shadow:0 4px 14px #0008;display:flex;flex-direction:column;align-items:center;gap:1px}
-#pop button b{font-size:20px;line-height:1}
-#pop button span{font-size:12px;color:#ffd23f;font-weight:700}
-#pop button:disabled{opacity:.45}
+#arms{position:fixed;display:flex;gap:8px;transform:translate(-50%,-100%);z-index:5}
+#pop button,#arms button{width:74px;padding:8px 0 6px;border-radius:14px;background:#14181ef2;border:1px solid #fff4;box-shadow:0 4px 14px #0008;display:flex;flex-direction:column;align-items:center;gap:1px}
+#pop button b,#arms button b{font-size:20px;line-height:1}
+#pop button span,#arms button span{font-size:12px;color:#ffd23f;font-weight:700}
+#pop button:disabled,#arms button:disabled{opacity:.45}
 .ico{width:26px;text-align:center;font-size:16px;color:#b9c6d6}
 .grid button{position:relative;aspect-ratio:16/10;padding:0;overflow:hidden;background:#2a313b center/cover no-repeat;border-color:#fff3}
 .grid button span{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 6px;background:linear-gradient(#0000,#000c);font-weight:700;font-size:13px;text-shadow:0 1px 2px #000}
@@ -88,16 +95,16 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
 <body>
 <canvas id="c"></canvas>
 <div id="top"></div>
-<div id="zoom"><button id="zin" aria-label="Zoom in">＋</button><button id="zout" aria-label="Zoom out">－</button></div>
+<div id="zoom"><button id="speed" aria-label="Game speed">×1</button><button id="zin" aria-label="Zoom in">＋</button><button id="zout" aria-label="Zoom out">－</button></div>
 <div id="toast"></div>
 <div id="bar"><div class="in">
   <div id="atk"></div>
-  <div id="meter"><div id="fill"></div><div id="mtxt"><span id="tr"></span><span id="gd"></span></div></div>
+  <div class="row" id="res"><div id="meter"><div id="fill"></div><div id="mtxt"><span id="tr"></span></div></div><div id="gd"></div></div>
   <div class="row">
     <span id="rv">20%</span><input id="ratio" type="range" min="5" max="100" step="5" value="20" aria-label="Attack ratio">
     <button id="aCity" class="bld" aria-label="Build city">▣ <span></span></button>
     <button id="aFort" class="bld" aria-label="Build defence post">◆ <span></span></button>
-    <button id="speed" aria-label="Game speed">×1</button>
+    <button id="aNuke" class="bld" aria-label="Missiles"><i>🚀</i> <span></span></button>
     <button id="menuBtn" aria-label="Menu">☰</button>
   </div>
 </div></div>
@@ -111,6 +118,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
   <button id="bCity" aria-label="Build city"><b>▣</b><span></span></button>
   <button id="bFort" aria-label="Build defence post"><b>◆</b><span></span></button>
 </div>
+<div id="arms" class="hidden"></div>
 
 <div id="menu" class="sheet"><div class="card">
   <h1>LANDMARK</h1>
@@ -314,6 +322,9 @@ const COLS = ['#000000','#ffd23f','#e6194b','#3cb44b','#4363d8','#f58231','#911e
 /* ---------- rules (after OpenFront's EngineConfig) ---------- */
 const MAG=[80,100,120], TCOST=[16.5,20,25];        // plains, highland, mountain
 const POST_MAG=5, POST_SPEED=3, POST_R=8, CITY_TROOPS=250000;
+// weapons bought with gold: price, blast radius in cells on the world map (wider on bigger maps), and the share
+// of its troops a nation loses per share of its land hit. Both fly MISSILE_V cells a tick.
+const ARMS=[{name:'Missile',ico:'🚀',cost:150000,r:10,kill:2},{name:'Nuke',ico:'☢️',cost:750000,r:26,kill:2}], MISSILE_V=6;
 let LOSS=5, LOSSP=2.5, PACE=1.2;                               // rescale for quarter-size grids
 const within=(v,a,b)=>Math.max(a,Math.min(b,v));
 // pow, exp and log may differ in the last bit between browsers; rounding to 32 bits keeps every device in step
@@ -344,7 +355,7 @@ function newGame(M, diff, seed, nbots, humans){
   const players = [mk(0,'',{tiles:M.total})];
   humans.forEach((nm,i)=>players.push(mk(i+1,nm,{human:true})));
   const H = humans.length;
-  G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],tick:0,aid:0,phase:'spawn',
+  G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],missiles:[],tick:0,aid:0,phase:'spawn',
        stamp:new Int32Array(M.N),mark:new Uint8Array(M.N),par:new Int32Array(M.N),q:new Int32Array(M.N),seen:new Int32Array(M.N),gen:0,plan:null,
        dirty:[],dflag:new Uint8Array(M.N),redraw:true,grace:0,fx:[],mp:false};
   answered = {};
@@ -646,6 +657,38 @@ function build(p,c,type){
   if (type===1) P.cities++; else P.forts.push(c);
   return true;
 }
+/* ---------- missiles ---------- */
+// p pays for weapon w at the land under c. It flies from the middle of p's land and lands some ticks later.
+function launch(p,c,w){
+  const g=G, {M,owner}=g, P=g.players[p], o=owner[c], A=ARMS[w];
+  if (!M.land[c] || o===0 || o===p || allied(p,o) || P.gold<A.cost) return;
+  P.gold-=A.cost;
+  const x=g.cx[p], y=g.cy[p], dx=c%M.W+.5-x, dy=((c/M.W)|0)+.5-y;
+  g.missiles.push({p,w,x,y,c,t0:g.tick,at:g.tick+Math.max(8,Math.ceil(Math.sqrt(dx*dx+dy*dy)/(MISSILE_V*M.sc))),r:Math.round(A.r*Math.sqrt(M.k))});
+  if (o===ME) toast(A.ico+' '+P.name);
+}
+// It lands: inside the circle, land that is not the sender's or an ally's goes back to unclaimed, buildings on it
+// are gone, and each nation hit loses troops by the share of its land it lost.
+function blast(m){
+  const g=G, {M,owner}=g, {W,H}=M, P=g.players[m.p], R=m.r, x0=m.c%W, y0=(m.c/W)|0;
+  if (!P.alive) return;
+  const lost=new Int32Array(g.n1), had=g.players.map(D=>D.tiles);
+  for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++){
+    if (dx*dx+dy*dy>R*R) continue;
+    const X=x0+dx, Y=y0+dy; if (X<0||Y<0||X>=W||Y>=H) continue;
+    const c=Y*W+X, o=owner[c]; if (o===0 || o===m.p || allied(m.p,o)) continue;
+    const b=g.bld[c];
+    if (b){ const D=g.players[o]; if (b===1) D.cities--; else D.forts.splice(D.forts.indexOf(c),1); g.bld[c]=0; g.blds.splice(g.blds.indexOf(c),1); }
+    give(c,0); lost[o]++;
+  }
+  for (let o=1;o<g.n1;o++) if (lost[o]){
+    const D=g.players[o];
+    D.troops-=D.troops*Math.min(1,ARMS[m.w].kill*lost[o]/had[o]);
+    D.lastHit=m.p; addRel(o,m.p,-30); for (const A of alliesOf(o)) addRel(A.id,m.p,-10);
+    if (D.tiles===0) eliminate(D,P);
+  }
+  g.fx.push({x:x0+.5,y:y0+.5,t:performance.now(),r:R,d:800+600*m.w});
+}
 function pickCell(p,ok){ const g=G; for (let t=0;t<600;t++){ const c=(g.rnd()*g.M.N)|0; if (g.owner[c]===p && !g.bld[c] && ok(c)) return c; } return -1; }
 
 /* ---------- bot turn ---------- */
@@ -731,7 +774,7 @@ function advance(f){
   for (let i=0;i<g.boats.length;i++){ const b=g.boats[i]; if (b.dead) continue; b.i+=.5*g.M.sc*f; if (b.i>=b.path.length-1){ b.dead=true; landBoat(b); } }
 }
 function tick(){
-  const g=G; g.tick++;
+  const g=G; g.tick++; g.tat=performance.now();       // tat: when, for drawing between ticks
   if (g.mp && g.tick<=SPAWN_T){              // network games open with a few seconds for everyone to choose a start
     if (g.tick===SPAWN_T){
       for (const P of g.players) if (P.human && !P.spawned) for (let t=0;t<4000 && !P.spawned;t++){
@@ -752,6 +795,10 @@ function tick(){
     think(P); const [a,b]=g.dm.think; P.next=g.tick+a+((g.rnd()*(b-a))|0);
   }
   stepPlan();
+  if (g.missiles.length){
+    for (const m of g.missiles) if (g.tick>=m.at){ m.dead=true; blast(m); }
+    g.missiles=g.missiles.filter(m=>!m.dead);
+  }
   if (g.tick%100===0) for (let i=0;i<g.rel.length;i++){ const v=g.rel[i]; if (v) g.rel[i]=v>0?Math.max(0,v-2):Math.min(0,v+2); }
   if (g.tick%10===0) for (let a=1;a<g.n1;a++) for (let b=a+1;b<g.n1;b++){
     const t=g.ally[a*g.n1+b]; if (!t || t>g.tick) continue;
@@ -811,6 +858,7 @@ function apply(p,it){
       break;
     case 'tap': if (P.alive && cell(it.c)) doTap(p,it.c,+it.f,!!it.boat); break;
     case 'build': if (P.alive && cell(it.c) && (it.t===1 || it.t===2)) build(p,it.c,it.t); break;
+    case 'nuke': if (P.alive && cell(it.c) && (it.w===0 || it.w===1)) launch(p,it.c,it.w); break;
     case 'req': if (P.alive && Number.isInteger(it.q) && it.q>0 && it.q<g.n1 && it.q!==p && g.players[it.q].alive) request(p,it.q); break;
     // the answer names who it is for, so it can never land on a different request
     case 'yes': if (P.alive && P.asks.some(a=>a.from===it.q) && g.players[it.q].alive) makeAlly(it.q,p); break;
@@ -864,7 +912,7 @@ function tapCell(c,byBoat){
   const g=G, me=g.players[ME], o=g.owner[c];
   if (!me.spawned){ if (o===0) act({k:'spawn',c}); return; }
   if (g.phase!=='play' || !me.alive) return;
-  if (armed){ if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
+  if (armed){ if (armed>=3){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-3}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
   // while there is unclaimed land next to you a tap on your own land pushes into it; the bar buttons build
   if (o===ME && !(g.adj[ME*g.n1]>0)){ if (!g.bld[c] && me.gold>=Math.min(cityCost(me),fortCost(me))) openPop(c); return; }
   if (o!==ME && allied(ME,o)){ openNat(c); return; }
@@ -941,9 +989,24 @@ function draw(){
     ctx.beginPath(); ctx.arc(x,y,4.5,0,6.3); ctx.fillStyle=COLS[b.p]; ctx.fill(); ctx.lineWidth=1.5; ctx.strokeStyle='#fff'; ctx.stroke();
   }
   const now=performance.now();
-  g.fx=g.fx.filter(f=>now-f.t<450);
+  // a missile in flight: where it will land, its trail, and the missile
+  for (const m of g.missiles){
+    const k=within((g.tick-m.t0+Math.min(1,(now-g.tat)/100))/(m.at-m.t0),0,1);
+    const sx=V.x+m.x*V.s, sy=V.y+m.y*V.s, ex=V.x+(m.c%W+.5)*V.s, ey=V.y+(((m.c/W)|0)+.5)*V.s, lift=Math.hypot(ex-sx,ey-sy)*.18;
+    const ax=u=>sx+(ex-sx)*u, ay=u=>sy+(ey-sy)*u-Math.sin(u*Math.PI)*lift;
+    ctx.beginPath(); ctx.arc(ex,ey,m.r*V.s,0,6.3); ctx.fillStyle='rgba(255,60,40,.14)'; ctx.fill(); ctx.setLineDash([6,4]); ctx.strokeStyle='#ff4a34'; ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); const u0=Math.max(0,k-.3);
+    for (let i=0;i<=10;i++){ const u=u0+(k-u0)*i/10; if (i) ctx.lineTo(ax(u),ay(u)); else ctx.moveTo(ax(u),ay(u)); }
+    ctx.lineCap='round'; ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=5; ctx.stroke(); ctx.strokeStyle='#ffb347'; ctx.lineWidth=3; ctx.stroke(); ctx.lineCap='butt';
+    ctx.beginPath(); ctx.arc(ax(k),ay(k),5.5+2.5*m.w,0,6.3); ctx.fillStyle=COLS[m.p]; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
+  }
+  g.fx=g.fx.filter(f=>now-f.t<(f.d||450));
   for (const f of g.fx){
-    const k=(now-f.t)/450, x=V.x+f.x*V.s, y=V.y+f.y*V.s;
+    const k=(now-f.t)/(f.d||450), x=V.x+f.x*V.s, y=V.y+f.y*V.s;
+    if (f.r){                                                   // a blast
+      ctx.beginPath(); ctx.arc(x,y,f.r*V.s*(.35+.65*k),0,6.3); ctx.fillStyle='rgba(255,140,60,'+(.55*(1-k))+')'; ctx.fill();
+      ctx.strokeStyle='rgba(255,225,170,'+(1-k)+')'; ctx.lineWidth=2.5; ctx.stroke(); continue;
+    }
     ctx.beginPath(); ctx.arc(x,y,4+22*k,0,6.3); ctx.strokeStyle='rgba(255,255,255,'+(1-k)+')'; ctx.lineWidth=2; ctx.stroke();
   }
   if (g.phase==='play' && g.tick<(g.mp?SPAWN_T:0)+150 && players[ME].tiles){
@@ -969,11 +1032,13 @@ function hud(){
     '<span class="chip">'+(g.mp && g.tick<SPAWN_T ? '⏱ '+Math.ceil((SPAWN_T-g.tick)/10) : rank.length+' left')+'</span>';
   $('fill').style.width=Math.min(100,100*me.troops/cap)+'%';
   $('tr').textContent=wait?'':fmt(me.troops)+' / '+fmt(cap);
-  $('gd').textContent=wait?'':'● '+fmt(me.gold);
+  $('gd').innerHTML=wait?'':'● '+fmt(me.gold)+'<i>+'+fmt((GOLD+GOLD_LAND*me.tiles/g.M.total)*10)+'/s</i>';
   const cc=cityCost(me), fc=fortCost(me);
   $('bCity').lastElementChild.textContent=fmt(cc); $('bFort').lastElementChild.textContent=fmt(fc);
   $('bCity').disabled=me.gold<cc; $('bFort').disabled=me.gold<fc;
-  for (const [id,cost,t] of [['aCity',cc,1],['aFort',fc,2]]){
+  const wp=ARMS[armed>=3?armed-3:0]; $('aNuke').firstElementChild.textContent=wp.ico;
+  for (const b of $('arms').children) b.disabled=me.gold<ARMS[b.dataset.w].cost;
+  for (const [id,cost,t] of [['aCity',cc,1],['aFort',fc,2],['aNuke',wp.cost,armed>=3?armed:3]]){
     const b=$(id), k=Math.min(1,me.gold/cost); b.lastElementChild.textContent=fmt(cost);
     b.classList.toggle('ready',k>=1); b.classList.toggle('on',armed===t);
     b.style.background=armed===t?'#ffd23f':'linear-gradient(90deg,#4b5a3a '+(k*100)+'%,#2a313b '+(k*100)+'%)';
@@ -1024,7 +1089,7 @@ function frame(ts){
 /* ---------- input ---------- */
 const pts=new Map(); let moved=false, sx=0, sy=0, swallow=false;
 cv.addEventListener('pointerdown',e=>{
-  swallow=popCell>=0; closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
+  swallow=popCell>=0 || !$('arms').classList.contains('hidden'); closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
   pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); clearTimeout(pressT);
   if (pts.size===1){ moved=false; sx=e.clientX; sy=e.clientY; const x=sx, y=sy; pressT=setTimeout(()=>{ if (pts.size===1 && !moved){ swallow=true; longPress(x,y); } },450); } else moved=true;
 });
@@ -1075,11 +1140,13 @@ document.addEventListener('touchmove',e=>{ if (e.touches.length>1) e.preventDefa
 /* ---------- menus ---------- */
 const clean = s => String(s||'').replace(/[<>&"']/g,'').trim().slice(0,14);
 const myName = () => clean(save.name);
-// a build button arms a building; the next tap on your own land places it
-function arm(t){ const me=G.players[ME]; armed=(armed===t || me.gold<(t===1?cityCost:fortCost)(me))?0:t; hud(); }
+// a bar button arms a building (1 city, 2 post) or a weapon (3 missile, 4 nuke); the next tap places it on your own
+// land, or fires at another nation's
+const priceOf = (t,P) => t===1 ? cityCost(P) : t===2 ? fortCost(P) : ARMS[t-3].cost;
+function arm(t){ const me=G.players[ME]; armed=(!t || armed===t || me.gold<priceOf(t,me))?0:t; hud(); }
 // tapping your own land offers what can be built there
 function openPop(c){ if (G.bld[c]) return; popCell=c; const e=$('pop'); e.style.left=within(tapX,90,cw-90)+'px'; e.style.top=Math.max(110,tapY)+'px'; e.classList.remove('hidden'); hud(); }
-function closePop(){ popCell=-1; natCell=-1; natWho=0; $('pop').classList.add('hidden'); $('nat').classList.add('hidden'); }
+function closePop(){ popCell=-1; natCell=-1; natWho=0; $('pop').classList.add('hidden'); $('nat').classList.add('hidden'); $('arms').classList.add('hidden'); }
 // long-press (or right-click, or a tap on an ally): the nation's card
 function openNat(c){
   const o=G.owner[c]; if (o<1 || o===ME) return; const Q=G.players[o];
@@ -1185,6 +1252,17 @@ $('ratio').addEventListener('input',()=>{ $('rv').textContent=$('ratio').value+'
 $('bCity').addEventListener('click',()=>{ act({k:'build',c:popCell,t:1}); closePop(); }); $('bFort').addEventListener('click',()=>{ act({k:'build',c:popCell,t:2}); closePop(); });
 $('zin').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1.6); clampView(); } }); $('zout').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1/1.6); clampView(); } });
 $('aCity').addEventListener('click',()=>arm(1)); $('aFort').addEventListener('click',()=>arm(2));
+// the missile button offers the weapons; picking one arms it, and the next tap on another nation fires it
+$('arms').innerHTML=ARMS.map((a,i)=>'<button data-w="'+i+'" aria-label="'+a.name+'"><b>'+a.ico+'</b><span>'+fmt(a.cost)+'</span></button>').join('');
+$('aNuke').addEventListener('click',()=>{
+  const e=$('arms'), open=!e.classList.contains('hidden'); closePop();
+  if (armed>=3){ arm(armed); return; }
+  if (open) return;
+  e.classList.remove('hidden'); hud();
+  const r=$('aNuke').getBoundingClientRect(), w=e.offsetWidth/2+8;
+  e.style.left=within(r.left+r.width/2,w,cw-w-48)+'px'; e.style.top=($($('ask').classList.contains('hidden')?'bar':'ask').getBoundingClientRect().top-8)+'px';      // clear of the zoom buttons and of a request waiting for an answer
+});
+$('arms').addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b || b.disabled) return; closePop(); arm(3+ +b.dataset.w); });
 $('nAlly').addEventListener('click',()=>{ const o=natWho; if (o>0 && o!==ME && G.players[o].alive) act(allied(ME,o)?{k:'break',q:o}:{k:'req',q:o}); closePop(); });
 $('nBoat').addEventListener('click',()=>{ const o=natWho, c=o>0 && natCell>=0 ? cellOf(o,natCell) : -1; closePop(); if (c>=0) tapCell(c,true); });
 function answer(k){ const a=G.players[ME].asks.find(a=>a.from===askFrom); if (!a) return; answered[a.from]=a.until; act({k,q:a.from}); hud(); }
