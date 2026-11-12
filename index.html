@@ -664,12 +664,22 @@ function build(p,c,type){
   return true;
 }
 /* ---------- missiles ---------- */
-// p pays for weapon w at the land under c. It flies from the middle of p's land and lands some ticks later.
+// where p's weapon aimed at c starts from: p's city or post nearest to c (the earlier built, if two are as near),
+// or the middle of p's land when p has neither
+function firesFrom(p,c){
+  const g=G, {M,owner}=g, W=M.W, tx=c%W, ty=(c/W)|0; let x=g.cx[p], y=g.cy[p], bd=-1;
+  for (const b of g.blds) if (owner[b]===p && (g.bld[b]===1 || g.bld[b]===2)){
+    const dx=b%W-tx, dy=((b/W)|0)-ty, d=dx*dx+dy*dy;
+    if (bd<0 || d<bd){ bd=d; x=b%W+.5; y=((b/W)|0)+.5; }
+  }
+  return [x,y];
+}
+// p pays for weapon w at the land under c. It flies from p's nearest city or post and lands some ticks later.
 function launch(p,c,w){
   const g=G, {M,owner}=g, P=g.players[p], o=owner[c], A=ARMS[w];
   if (!M.land[c] || o===0 || o===p || allied(p,o) || P.gold<A.cost) return;
   P.gold-=A.cost;
-  const x=g.cx[p], y=g.cy[p], dx=c%M.W+.5-x, dy=((c/M.W)|0)+.5-y;
+  const [x,y]=firesFrom(p,c), dx=c%M.W+.5-x, dy=((c/M.W)|0)+.5-y;
   g.missiles.push({p,w,x,y,c,t0:g.tick,at:g.tick+Math.max(8,Math.ceil(Math.sqrt(dx*dx+dy*dy)/(MISSILE_V*M.sc))),r:Math.round(A.r*Math.sqrt(M.k))});
   if (o===ME) toast(A.ico+' '+P.name);
 }
