@@ -820,7 +820,23 @@ function apply(p,it){
   }
 }
 function act(it){ if (G.mp){ it.z=Math.round(performance.now()); NET.send(it); } else apply(ME,it); }      // z: when it left, to time the round trip
-// send a share f of p's troops at the land under cell c: by land if it touches p's land, else by boat
+// Land over a river is a region of its own to the flood in doTap, yet an attack crosses narrow water. Can p's land
+// be reached from c, walking over o's land and narrow water? A nation's land counts however far the walk: an attack
+// on it by land gets there. Unclaimed land counts within NEAR steps (the far bank of a river p's border has not
+// reached yet); unclaimed land joined only by a far strait (Africa from France) stays a boat trip.
+const NEAR=40;
+function byLand(p,c,o){
+  const g=G, {M,owner,seen}=g, gen=++g.gen, q=[c]; seen[c]=gen;
+  for (let h=0, end=1, left=o?Infinity:NEAR*M.sc; h<q.length; h++){
+    if (h===end){ if (--left<=0) return false; end=q.length; }
+    const s=q[h];
+    for (let k=0;k<4;k++){ const d=reach(M,s,k); if (d<0) continue;
+      if (owner[d]===p) return true;
+      if (owner[d]===o && seen[d]!==gen){ seen[d]=gen; q.push(d); } }
+  }
+  return false;
+}
+// send a share f of p's troops at the land under cell c: by land if an attack by land can get there, else by boat
 function doTap(p,c,f,byBoat){
   const g=G, {M,owner,mark}=g, P=g.players[p]; if (!M.land[c]) return;
   const o=owner[c], amt=Math.floor(P.troops*within(f||0,.05,1));
@@ -832,7 +848,7 @@ function doTap(p,c,f,byBoat){
     for (let k=0;k<4;k++){ const d=nbr(M,s,k); if (d<0) continue;
       if (M.water[d]){ sea=true; const e=reach(M,s,k); if (e>=0 && owner[e]===p) touch=true; } else if (!M.land[d]) continue; else if (owner[d]===p) touch=true; else if (owner[d]===o && !mark[d]){ mark[d]=1; st.push(d); } }
     if (sea) coast.push(s); }
-  if (touch && !byBoat){ order(p,o,amt); return; }
+  if (!byBoat && (touch || byLand(p,c,o))){ order(p,o,amt); return; }
   if (boatsOf(p)>=3) return;
   let path=null;
   if (coast.length){
