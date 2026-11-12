@@ -117,6 +117,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
 <div id="pop" class="hidden">
   <button id="bCity" aria-label="Build city"><b>▣</b><span></span></button>
   <button id="bFort" aria-label="Build defence post"><b>◆</b><span></span></button>
+  <button id="bSam" aria-label="Build air defence"><b>🛡️</b><span></span></button>
 </div>
 <div id="arms" class="hidden"></div>
 
@@ -329,6 +330,11 @@ const ARMS=[{name:'Missile',ico:'🚀',cost:150000,r:10,kill:2},{name:'Nuke',ico
 // Fallout (after OpenFront's falloutDefenseModifier): land a blast empties stays fallout until someone takes it, and
 // taking it costs this many times the troops and the time: 5, less 2 times the share of the map's land in fallout
 const fallMod = () => 5-2*G.falls/G.M.total;
+// Air defence (building 3, after OpenFront's SAM launcher): it destroys a weapon in flight that comes inside its
+// circle, whoever the weapon is aimed at, then reloads. Price (rising with each one a nation has, to a cap), reach in
+// cells on the world map (wider on bigger maps, like a blast), and ticks to reload.
+const SAM_COST=300000, SAM_MAX=900000, SAM_R=40, SAM_T=100;
+const samCost = P => Math.min(SAM_MAX, SAM_COST*(P.sams+1)), samR = () => Math.round(SAM_R*Math.sqrt(G.M.k));
 let LOSS=5, LOSSP=2.5, PACE=1.2;                               // rescale for quarter-size grids
 const within=(v,a,b)=>Math.max(a,Math.min(b,v));
 // pow, exp and log may differ in the last bit between browsers; rounding to 32 bits keeps every device in step
@@ -343,7 +349,7 @@ const fmt = n => n<1000 ? String(Math.round(n)) : n<1e6 ? (n/1000).toFixed(n<100
 /* ---------- game state ---------- */
 let ME = 1, NET = null;                      // my player id; the connection when playing over the network
 const SPAWN_T = 100, NET_SUB = 4;           // network games: ticks to choose a start, and sub-steps per tick
-let G = null, speed = 1, paused = true, armed = 0, popCell = -1, natCell = -1, natWho = 0, askFrom = 0, answered = {}, tapX = 0, tapY = 0, pressT = 0;
+let G = null, speed = 1, paused = true, armed = 0, ringAt = -1, popCell = -1, natCell = -1, natWho = 0, askFrom = 0, answered = {}, tapX = 0, tapY = 0, pressT = 0;
 const save = (() => { try { return JSON.parse(localStorage.getItem('landmark.v1')) || {}; } catch(e){ return {}; } })();
 save.diff = save.diff || 'easy'; save.wins = save.wins || {}; save.bots = save.bots || 6;
 const persist = () => { try { localStorage.setItem('landmark.v1', JSON.stringify(save)); } catch(e){} };
@@ -355,11 +361,11 @@ function newGame(M, diff, seed, nbots, humans){
   const keys = Object.keys(FL), nat = M.nations.slice();
   for (let i=keys.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [keys[i],keys[j]]=[keys[j],keys[i]]; }
   for (let i=nat.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [nat[i],nat[j]]=[nat[j],nat[i]]; }
-  const mk = (id,name,x) => Object.assign({id,name,tiles:0,troops:0,gold:0,alive:false,lastHit:0,cities:0,forts:[],traitor:0,asks:[],spawned:false},x);
+  const mk = (id,name,x) => Object.assign({id,name,tiles:0,troops:0,gold:0,alive:false,lastHit:0,cities:0,forts:[],sams:0,traitor:0,asks:[],spawned:false},x);
   const players = [mk(0,'',{tiles:M.total})];
   humans.forEach((nm,i)=>players.push(mk(i+1,nm,{human:true})));
   const H = humans.length;
-  G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],missiles:[],fall:new Uint8Array(M.N),falls:0,fmarks:[],tick:0,aid:0,phase:'spawn',
+  G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],missiles:[],fall:new Uint8Array(M.N),falls:0,fmarks:[],rdy:new Int32Array(M.N),tick:0,aid:0,phase:'spawn',
        stamp:new Int32Array(M.N),mark:new Uint8Array(M.N),par:new Int32Array(M.N),q:new Int32Array(M.N),seen:new Int32Array(M.N),gen:0,plan:null,
        dirty:[],dflag:new Uint8Array(M.N),redraw:true,grace:0,fx:[],mp:false};
   answered = {};
@@ -385,7 +391,7 @@ function give(c,p){
   const a=A.id, n1=g.n1, adj=g.adj, owner=g.owner;
   A.tiles--; B.tiles++; owner[c]=p;
   if (p && g.fall[c]){ g.fall[c]=0; g.falls--; }           // taken: no longer fallout
-  if (b===1){ A.cities--; B.cities++; } else if (b===2){ A.forts.splice(A.forts.indexOf(c),1); B.forts.push(c); }
+  if (b===1){ A.cities--; B.cities++; } else if (b===2){ A.forts.splice(A.forts.indexOf(c),1); B.forts.push(c); } else if (b===3){ A.sams--; B.sams++; }
   // adj[x][y] counts the places where x's land meets y's, fords included
   for (let k=0;k<4;k++){
     let d=nbr(M,c,k); if (d<0) continue;
@@ -657,10 +663,10 @@ function landBoat(b){
   if (o>0 && D.tiles===0) eliminate(D,P);
 }
 function build(p,c,type){
-  const g=G, P=g.players[p], cost=type===1?cityCost(P):fortCost(P);
+  const g=G, P=g.players[p], cost=type===1?cityCost(P):type===2?fortCost(P):samCost(P);
   if (g.owner[c]!==p || g.bld[c] || P.gold<cost) return false;
   P.gold-=cost; g.bld[c]=type; g.blds.push(c);
-  if (type===1) P.cities++; else P.forts.push(c);
+  if (type===1) P.cities++; else if (type===2) P.forts.push(c); else { P.sams++; g.rdy[c]=0; }       // rdy: the tick an air defence is loaded again
   return true;
 }
 /* ---------- missiles ---------- */
@@ -694,7 +700,7 @@ function blast(m){
     const X=x0+dx, Y=y0+dy; if (X<0||Y<0||X>=W||Y>=H) continue;
     const c=Y*W+X, o=owner[c]; if (o===0 || o===m.p || allied(m.p,o)) continue;
     const b=g.bld[c];
-    if (b){ const D=g.players[o]; if (b===1) D.cities--; else D.forts.splice(D.forts.indexOf(c),1); g.bld[c]=0; g.blds.splice(g.blds.indexOf(c),1); }
+    if (b){ const D=g.players[o]; if (b===1) D.cities--; else if (b===2) D.forts.splice(D.forts.indexOf(c),1); else { D.sams--; g.rdy[c]=0; } g.bld[c]=0; g.blds.splice(g.blds.indexOf(c),1); }
     give(c,0); g.fall[c]=1; g.falls++; lost[o]++;
   }
   // where the signs go (drawing only): the middle, then two rings of six, each moved to fallout close by
@@ -709,19 +715,49 @@ function blast(m){
   for (let o=1;o<g.n1;o++) if (lost[o]){
     const D=g.players[o];
     D.troops-=D.troops*Math.min(1,ARMS[m.w].kill*lost[o]/had[o]);
-    D.lastHit=m.p; addRel(o,m.p,-30); for (const A of alliesOf(o)) addRel(A.id,m.p,-10);
+    D.lastHit=m.p; D.struck=true; addRel(o,m.p,-30); for (const A of alliesOf(o)) addRel(A.id,m.p,-10);
     if (D.tiles===0) eliminate(D,P);
   }
   g.fx.push({x:x0+.5,y:y0+.5,t:performance.now(),r:R,d:800+600*m.w});
+}
+// Every tick each weapon in flight is somewhere on the straight line from where it was fired to its target (the arc
+// on screen is only for looks). The first loaded air defence, in the order built, that has that spot in its circle
+// and belongs to neither the sender nor an ally of the sender destroys the weapon there and starts to reload.
+function shootDown(){
+  const g=G, {M,owner}=g, W=M.W, r=samR(), rr=r*r;
+  for (const m of g.missiles){
+    const k=Math.min(1,(g.tick-m.t0)/(m.at-m.t0)), x=m.x+(m.c%W+.5-m.x)*k, y=m.y+(((m.c/W)|0)+.5-m.y)*k;
+    for (const b of g.blds){
+      if (g.bld[b]!==3 || g.rdy[b]>g.tick) continue;
+      const o=owner[b]; if (o===m.p || allied(o,m.p)) continue;
+      const dx=b%W+.5-x, dy=((b/W)|0)+.5-y; if (dx*dx+dy*dy>rr) continue;
+      m.dead=true; g.rdy[b]=g.tick+SAM_T;
+      g.fx.push({x,y,t:performance.now(),hit:1,d:700});
+      if (m.p===ME) toast(ARMS[m.w].ico+' ✕ 🛡️ '+g.players[o].name);
+      break;
+    }
+  }
+}
+// would p's weapon aimed at c be shot down on the way, as things stand now?
+function blocked(p,c){
+  const g=G, {M,owner}=g, W=M.W, [x0,y0]=firesFrom(p,c), dx=c%W+.5-x0, dy=((c/W)|0)+.5-y0;
+  const n=Math.max(8,Math.ceil(Math.sqrt(dx*dx+dy*dy)/(MISSILE_V*M.sc))), r=samR(), rr=r*r;
+  for (const b of g.blds){
+    if (g.bld[b]!==3 || g.rdy[b]>g.tick) continue;
+    const o=owner[b]; if (o===p || allied(o,p)) continue;
+    const bx=b%W+.5, by=((b/W)|0)+.5;
+    for (let i=0;i<=n;i++){ const x=x0+dx*i/n-bx, y=y0+dy*i/n-by; if (x*x+y*y<=rr) return true; }
+  }
+  return false;
 }
 // Computer nations' weapons (Normal and Hard). After each buy a nation draws what it saves for next: mostly a city,
 // often a missile, and once it has two cities now and then a nuke. So it never saves for weapons only.
 const nextWant = P => { const r=G.rnd(); return P.cities>=2 && r<.15 ? 2 : r<.5 ? 1 : 0; };
 // whom P would fire at: the nation it is fighting, was last hit by or likes least. Nobody, if it has no quarrel.
-function foeOf(P){
+function foeOf(P,skip){
   const g=G, p=P.id; let best=null, bs=0;
   for (const Q of g.players){
-    if (!Q.alive || Q.id===p || allied(p,Q.id) || (Q.human && g.tick<g.grace)) continue;
+    if (!Q.alive || Q.id===p || Q===skip || allied(p,Q.id) || (Q.human && g.tick<g.grace)) continue;
     let v=-relOf(p,Q.id); if (Q.id===P.lastHit) v+=30;
     if (g.attacks.some(a=>!a.dead && ((a.from===p && a.to===Q.id) || (a.from===Q.id && a.to===p)))) v+=50;
     if (v>bs){ bs=v; best=Q; }
@@ -729,7 +765,8 @@ function foeOf(P){
   return best;
 }
 // where on T's land to drop weapon w: of T's cities and a few of its cells drawn at random, the one whose circle
-// holds the most land of nations P is not allied with, a city in it counting as about a fifth of the circle
+// holds the most land of nations P is not allied with, a city in it counting as about a fifth of the circle.
+// A spot the weapon would reach comes before any spot where it would be shot down.
 function aim(P,T,w){
   const g=G, {M,owner}=g, {W,H}=M, p=P.id, R=Math.round(ARMS[w].r*Math.sqrt(M.k)), city=(R*R*3/5)|0, cand=[];
   for (const c of g.blds) if (owner[c]===T.id && g.bld[c]===1) cand.push(c);
@@ -745,6 +782,7 @@ function aim(P,T,w){
         const c=Y*W+X, o=owner[c]; if (o && o!==p && !allied(p,o)) v+=g.bld[c]===1?city:1;
       }
     }
+    if (g.blds.length && !blocked(p,c0)) v+=1e7;
     if (v>bs){ bs=v; best=c0; }
   }
   return best;
@@ -791,13 +829,28 @@ function think(P){
     const c=pickCell(p,c=>touches(c,P.lastHit)); if (c>=0) build(p,c,2);
   }
   const arms=g.diff!=='easy' && !P.human;
-  if (arms && P.want){                        // saving for a weapon (1 missile, 2 nuke)
+  if (arms && P.struck && !P.sams && !P.want && P.cities>0) P.want=3;      // a weapon has hit it: an air defence is its next buy
+  if (arms && P.want===3){
+    if (P.gold>=samCost(P)){
+      // beside one of its cities if there is room, so the circle covers them
+      const R=samR()/2, near=c=>{ const x=c%g.M.W, y=(c/g.M.W)|0; return g.blds.some(b=>owner[b]===p && g.bld[b]===1 && (b%g.M.W-x)*(b%g.M.W-x)+(((b/g.M.W)|0)-y)*(((b/g.M.W)|0)-y)<=R*R); };
+      let c=pickCell(p,c=>ownNb(c,p)===4 && near(c)); if (c<0) c=pickCell(p,c=>ownNb(c,p)===4);
+      if (c>=0 && build(p,c,3)) P.want=nextWant(P); else { P.want=0; P.struck=false; }      // no room for one: back to cities until it is hit again
+    }
+  }
+  else if (arms && P.want){                   // saving for a weapon (1 missile, 2 nuke)
     const w=P.want-1;
     if (P.gold>=ARMS[w].cost){
-      const T=foeOf(P);
+      let T=foeOf(P);
       if (!T) P.want=0;                       // no quarrel with anyone: back to cities
       else if (!(T.human && P.lastHit!==T.id && g.rnd()>g.dm.bias)){
-        const c=aim(P,T,w), gold=P.gold; if (c>=0) launch(p,c,w);
+        let c=aim(P,T,w); const gold=P.gold;
+        if (c>=0 && blocked(p,c)){             // every spot on that nation is covered: another nation it has a quarrel with, if one is open
+          const T2=foeOf(P,T), c2=T2 && !(T2.human && P.lastHit!==T2.id) ? aim(P,T2,w) : -1;
+          if (c2>=0 && !blocked(p,c2)) c=c2;
+        }
+        if (c>=0 && w===1 && blocked(p,c)) P.want=1;       // a nuke that would be shot down waits: a missile goes first
+        else if (c>=0) launch(p,c,w);
         if (P.gold<gold) P.want=nextWant(P);
       }
     }
@@ -868,7 +921,8 @@ function tick(){
   }
   stepPlan();
   if (g.missiles.length){
-    for (const m of g.missiles) if (g.tick>=m.at){ m.dead=true; blast(m); }
+    shootDown();
+    for (const m of g.missiles) if (!m.dead && g.tick>=m.at){ m.dead=true; blast(m); }
     g.missiles=g.missiles.filter(m=>!m.dead);
   }
   if (g.tick%100===0) for (let i=0;i<g.rel.length;i++){ const v=g.rel[i]; if (v) g.rel[i]=v>0?Math.max(0,v-2):Math.min(0,v+2); }
@@ -929,7 +983,7 @@ function apply(p,it){
       scan(); if (p===ME) focusOn(it.c);
       break;
     case 'tap': if (P.alive && cell(it.c)) doTap(p,it.c,+it.f,!!it.boat); break;
-    case 'build': if (P.alive && cell(it.c) && (it.t===1 || it.t===2)) build(p,it.c,it.t); break;
+    case 'build': if (P.alive && cell(it.c) && (it.t===1 || it.t===2 || it.t===3)) build(p,it.c,it.t); break;
     case 'nuke': if (P.alive && cell(it.c) && (it.w===0 || it.w===1)) launch(p,it.c,it.w); break;
     case 'req': if (P.alive && Number.isInteger(it.q) && it.q>0 && it.q<g.n1 && it.q!==p && g.players[it.q].alive) request(p,it.q); break;
     // the answer names who it is for, so it can never land on a different request
@@ -980,12 +1034,19 @@ function doTap(p,c,f,byBoat){
 }
 
 /* ---------- the player's tap ---------- */
+// my air defence under the point (x,y) of the screen, if one is drawn there
+function samNear(x,y){
+  const g=G, W=g.M.W; let best=-1, bd=20*20;
+  for (const b of g.blds) if (g.bld[b]===3 && g.owner[b]===ME){ const dx=V.x+(b%W+.5)*V.s-x, dy=V.y+(((b/W)|0)+.5)*V.s-y, d=dx*dx+dy*dy; if (d<bd){ bd=d; best=b; } }
+  return best;
+}
 function tapCell(c,byBoat){
   const g=G, me=g.players[ME], o=g.owner[c];
   if (!me.spawned){ if (o===0) act({k:'spawn',c}); return; }
   if (g.phase!=='play' || !me.alive) return;
   if (armed){ if (armed>=3){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-3}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
   // while there is unclaimed land next to you a tap on your own land pushes into it; the bar buttons build
+  if (!byBoat){ const s=samNear(tapX,tapY); if (s>=0){ ringAt=s; return; } }          // a tap on your air defence shows how far it reaches
   if (o===ME && !(g.adj[ME*g.n1]>0)){ if (!g.bld[c] && me.gold>=Math.min(cityCost(me),fortCost(me))) openPop(c); return; }
   if (o!==ME && allied(ME,o)){ openNat(c); return; }
   act({k:'tap',c,f:$('ratio').value/100,boat:!!byBoat});
@@ -1082,6 +1143,19 @@ function draw(){
   for (const c of g.blds){
     const x=V.x+(c%W+.5)*V.s, y=V.y+(((c/W)|0)+.5)*V.s, r=within(V.s*1.6,3.5,9), o=owner[c];
     if (g.bld[c]===2){ ctx.beginPath(); ctx.arc(x,y,POST_R*M.sc*V.s,0,6.3); ctx.fillStyle='rgba(0,0,0,.12)'; ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=1; ctx.stroke(); }
+    if (g.bld[c]===3){
+      const live=g.rdy[c]<=g.tick, q=r*1.25;
+      if (c===ringAt || (armed>=3 && o!==ME && !allied(ME,o))){
+        ctx.beginPath(); ctx.arc(x,y,samR()*V.s,0,6.3); ctx.fillStyle='rgba(120,200,255,'+(live?.1:.04)+')'; ctx.fill();
+        ctx.strokeStyle='rgba(10,40,70,'+(live?.45:.15)+')'; ctx.lineWidth=4; ctx.stroke();
+        ctx.setLineDash([4,5]); ctx.strokeStyle='rgba(170,230,255,'+(live?1:.4)+')'; ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.globalAlpha=live?1:.45;
+      ctx.beginPath(); ctx.moveTo(x,y-q*1.5); ctx.lineTo(x+q*1.45,y+q); ctx.lineTo(x-q*1.45,y+q); ctx.closePath();
+      ctx.fillStyle='#f4f8fb'; ctx.fill(); ctx.strokeStyle=COLS[o]; ctx.lineWidth=2.5; ctx.lineJoin='round'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x,y+q*.15,q*.38,0,6.3); ctx.fillStyle=COLS[o]; ctx.fill();
+      ctx.globalAlpha=1; continue;
+    }
     ctx.fillStyle=COLS[o]; ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.beginPath();
     if (g.bld[c]===1) ctx.rect(x-r,y-r,2*r,2*r);
     else { ctx.moveTo(x,y-r*1.3); ctx.lineTo(x+r*1.3,y); ctx.lineTo(x,y+r*1.3); ctx.lineTo(x-r*1.3,y); ctx.closePath(); }
@@ -1115,6 +1189,11 @@ function draw(){
   g.fx=g.fx.filter(f=>now-f.t<(f.d||450));
   for (const f of g.fx){
     const k=(now-f.t)/(f.d||450), x=V.x+f.x*V.s, y=V.y+f.y*V.s;
+    if (f.hit){                                                 // a weapon shot down
+      ctx.strokeStyle='rgba(170,225,255,'+(1-k)+')'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(x,y,5+16*k,0,6.3); ctx.stroke();
+      ctx.beginPath(); for (let i=0;i<8;i++){ const t=i*Math.PI/4; ctx.moveTo(x+Math.cos(t)*(4+10*k),y+Math.sin(t)*(4+10*k)); ctx.lineTo(x+Math.cos(t)*(10+22*k),y+Math.sin(t)*(10+22*k)); } ctx.stroke();
+      continue;
+    }
     if (f.r){                                                   // a blast
       ctx.beginPath(); ctx.arc(x,y,f.r*V.s*(.35+.65*k),0,6.3); ctx.fillStyle='rgba(255,140,60,'+(.55*(1-k))+')'; ctx.fill();
       ctx.strokeStyle='rgba(255,225,170,'+(1-k)+')'; ctx.lineWidth=2.5; ctx.stroke(); continue;
@@ -1146,8 +1225,8 @@ function hud(){
   $('tr').textContent=wait?'':fmt(me.troops)+' / '+fmt(cap);
   $('gd').innerHTML=wait?'':'● '+fmt(me.gold)+'<i>+'+fmt((GOLD+GOLD_LAND*me.tiles/g.M.total)*10)+'/s</i>';
   const cc=cityCost(me), fc=fortCost(me);
-  $('bCity').lastElementChild.textContent=fmt(cc); $('bFort').lastElementChild.textContent=fmt(fc);
-  $('bCity').disabled=me.gold<cc; $('bFort').disabled=me.gold<fc;
+  $('bCity').lastElementChild.textContent=fmt(cc); $('bFort').lastElementChild.textContent=fmt(fc); $('bSam').lastElementChild.textContent=fmt(samCost(me));
+  $('bCity').disabled=me.gold<cc; $('bFort').disabled=me.gold<fc; $('bSam').disabled=me.gold<samCost(me);
   const wp=ARMS[armed>=3?armed-3:0]; $('aNuke').firstElementChild.textContent=wp.ico;
   for (const b of $('arms').children) b.disabled=me.gold<ARMS[b.dataset.w].cost;
   for (const [id,cost,t] of [['aCity',cc,1],['aFort',fc,2],['aNuke',wp.cost,armed>=3?armed:3]]){
@@ -1269,8 +1348,8 @@ const myName = () => clean(save.name);
 const priceOf = (t,P) => t===1 ? cityCost(P) : t===2 ? fortCost(P) : ARMS[t-3].cost;
 function arm(t){ const me=G.players[ME]; armed=(!t || armed===t || me.gold<priceOf(t,me))?0:t; hud(); }
 // tapping your own land offers what can be built there
-function openPop(c){ if (G.bld[c]) return; popCell=c; const e=$('pop'); e.style.left=within(tapX,90,cw-90)+'px'; e.style.top=Math.max(110,tapY)+'px'; e.classList.remove('hidden'); hud(); }
-function closePop(){ popCell=-1; natCell=-1; natWho=0; $('pop').classList.add('hidden'); $('nat').classList.add('hidden'); $('arms').classList.add('hidden'); }
+function openPop(c){ if (G.bld[c]) return; popCell=c; const e=$('pop'); e.style.left=within(tapX,130,cw-130)+'px'; e.style.top=Math.max(110,tapY)+'px'; e.classList.remove('hidden'); hud(); }
+function closePop(){ popCell=-1; natCell=-1; natWho=0; ringAt=-1; $('pop').classList.add('hidden'); $('nat').classList.add('hidden'); $('arms').classList.add('hidden'); }
 // long-press (or right-click, or a tap on an ally): the nation's card
 function openNat(c){
   const o=G.owner[c]; if (o<1 || o===ME) return; const Q=G.players[o];
@@ -1373,7 +1452,7 @@ $('nm').addEventListener('change',()=>{ if (NET && NET.want && NET.id && myName(
 $('solo').addEventListener('click',()=>{ NET.solo=true; renderMenu(); });
 $('toMp').addEventListener('click',()=>{ NET.solo=false; renderMenu(); });
 $('ratio').addEventListener('input',()=>{ $('rv').textContent=$('ratio').value+'%'; });
-$('bCity').addEventListener('click',()=>{ act({k:'build',c:popCell,t:1}); closePop(); }); $('bFort').addEventListener('click',()=>{ act({k:'build',c:popCell,t:2}); closePop(); });
+$('bCity').addEventListener('click',()=>{ act({k:'build',c:popCell,t:1}); closePop(); }); $('bFort').addEventListener('click',()=>{ act({k:'build',c:popCell,t:2}); closePop(); }); $('bSam').addEventListener('click',()=>{ act({k:'build',c:popCell,t:3}); closePop(); });
 $('zin').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1.6); clampView(); } }); $('zout').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1/1.6); clampView(); } });
 $('aCity').addEventListener('click',()=>arm(1)); $('aFort').addEventListener('click',()=>arm(2));
 // the missile button offers the weapons; picking one arms it, and the next tap on another nation fires it
