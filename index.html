@@ -312,8 +312,9 @@ const FL = {
 // nation troop cap and growth by difficulty are OpenFront's (Config.troopCap, troopIncreaseRate)
 // 'bias' is how often a nation that you have not attacked will go for you rather than leave you be
 // Easy and Normal sit close together on purpose: results swing sharply with these numbers. The larger
-// difference is diplomacy (on Normal nations refuse runaway leaders, court the strong, and will betray you)
-const DIFF = {easy:{cap:.57,grow:.87,start:14000,think:[40,64],bias:.3}, normal:{cap:.6,grow:.88,start:15000,think:[36,58],bias:.38}, hard:{cap:1,grow:1,start:25000,think:[12,20],bias:1}};
+// difference is diplomacy (on Normal nations refuse runaway leaders, court the strong, and will betray you).
+// Hard's cap was 1 (OpenFront's); at .8 a scripted player wins about one match in eight instead of one in thirty.
+const DIFF = {easy:{cap:.57,grow:.87,start:14000,think:[40,64],bias:.3}, normal:{cap:.6,grow:.88,start:15000,think:[36,58],bias:.38}, hard:{cap:.8,grow:1,start:25000,think:[12,20],bias:1}};
 const GRACE={easy:700,normal:600,hard:50};
 const GOLD=300, GOLD_LAND=2500;                 // gold a tick: a base, plus more the larger your share of the land
 const ALLY_T=3000, REQ_COOL=300, ASK_T=200, TRAITOR_T=300, RETREAT=.75;
