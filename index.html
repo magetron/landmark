@@ -1088,8 +1088,10 @@ function sign(){
   const out=mk(), z=out.getContext('2d'); z.shadowColor='rgba(20,30,0,.95)'; z.shadowBlur=5*u; z.drawImage(a,0,0); z.drawImage(a,0,0);
   return out;
 }
+// The canvas is laid out to fill the window, so its own box is the size to draw and place things by. The window's
+// reported size can be the old one for a moment after a tablet is turned or its window is resized.
 function fit(){
-  dpr=Math.min(window.devicePixelRatio||1,2); cw=innerWidth; ch=innerHeight;
+  dpr=Math.min(window.devicePixelRatio||1,2); cw=cv.clientWidth||innerWidth; ch=cv.clientHeight||innerHeight;
   cv.width=Math.round(cw*dpr); cv.height=Math.round(ch*dpr);
   if (!G) return;
   const {W,H}=G.M, top=40, bot=112;
@@ -1330,12 +1332,17 @@ function cellAt(x,y){
   }
   return best;
 }
-addEventListener('resize',()=>{
+function refit(){
+  if (cv.clientWidth===cw && cv.clientHeight===ch && Math.min(window.devicePixelRatio||1,2)===dpr) return;
+  closePop();
   if (!G){ fit(); return; }
   const far=V.s<=V.min*1.02, mx=(cw/2-V.x)/V.s, my=(ch/2-V.y)/V.s, s=V.s;
   fit();
   if (!far){ V.s=s; V.x=cw/2-mx*V.s; V.y=ch/2-my*V.s; clampView(); }
-});
+}
+// the window says it changed size, or the canvas's box did: either way, fit to the box
+addEventListener('resize',refit);
+if (window.ResizeObserver) new ResizeObserver(refit).observe(cv);
 // the page itself never zooms: only the map does
 for (const t of ['gesturestart','gesturechange','gestureend']) document.addEventListener(t,e=>e.preventDefault(),{passive:false});
 document.addEventListener('touchmove',e=>{ if (e.touches.length>1) e.preventDefault(); },{passive:false});
