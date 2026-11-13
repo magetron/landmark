@@ -20,6 +20,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:b
   background:#000c;padding:6px 12px;border-radius:14px;font-size:13px;pointer-events:none;
   opacity:0;transition:opacity .25s;max-width:92vw;text-align:center}
 #toast.on{opacity:1}
+#sa{position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none}
 #bar{position:fixed;left:0;right:0;bottom:0;padding:6px 10px calc(8px + env(safe-area-inset-bottom));
   background:#14181ee8;border-top:1px solid #0006}
 #bar .in{max-width:560px;margin:0 auto}
@@ -94,6 +95,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="sa"></div>
 <div id="top"></div>
 <div id="zoom"><button id="speed" aria-label="Game speed">×1</button><button id="zin" aria-label="Zoom in">＋</button><button id="zout" aria-label="Zoom out">－</button></div>
 <div id="toast"></div>
@@ -1090,18 +1092,20 @@ function sign(){
 }
 // The canvas is laid out to fill the window, so its own box is the size to draw and place things by. The window's
 // reported size can be the old one for a moment after a tablet is turned or its window is resized.
+// The toolbar is taller on a device that keeps room at the bottom for a home bar, so the map stops that much higher.
+const barRoom = () => 112+$('sa').offsetHeight;
 function fit(){
   dpr=Math.min(window.devicePixelRatio||1,2); cw=cv.clientWidth||innerWidth; ch=cv.clientHeight||innerHeight;
   cv.width=Math.round(cw*dpr); cv.height=Math.round(ch*dpr);
   if (!G) return;
-  const {W,H}=G.M, top=40, bot=112;
+  const {W,H}=G.M, top=40, bot=barRoom();
   V.min=Math.min(cw/W,(ch-top-bot)/H); V.s=V.min; V.x=(cw-W*V.s)/2; V.y=top+((ch-top-bot)-H*V.s)/2;
 }
 const maxZoom = () => Math.max(V.min*4,14);
 function clampView(){
   const {W,H}=G.M; V.s=within(V.s,V.min,maxZoom());
   // the map always covers the play area when it is big enough, and sits centred when it is not
-  const top=40, bot=112, w=W*V.s, h=H*V.s, ah=ch-top-bot;
+  const top=40, bot=barRoom(), w=W*V.s, h=H*V.s, ah=ch-top-bot;
   V.x = w<=cw ? (cw-w)/2 : within(V.x,cw-w,0);
   V.y = h<=ah ? top+(ah-h)/2 : within(V.y,ch-bot-h,top);
 }
@@ -1269,7 +1273,7 @@ function frame(ts){
       while (f>0 && G.phase==='play'){ const s=Math.min(f,1-acc); advance(s); acc+=s; f-=s; if (acc>=1-1e-9){ acc=0; tick(); } }
     }
     const t1=live?performance.now():0;
-    draw(); if (ts-hudAt>120){ hudAt=ts; hud(); }
+    draw(); if (ts-hudAt>120){ hudAt=ts; hud(); if (DBG) dbgShow(); }
     if (live){
       const t2=performance.now(); PF.n++; if (raw>50) PF.slow++; if (raw<5000) PF.worst=Math.max(PF.worst,raw);
       PF.sim=Math.max(PF.sim,t1-t0); PF.drw=Math.max(PF.drw,t2-t1); PF.q=Math.max(PF.q,NET.q.length);
@@ -1332,6 +1336,20 @@ function cellAt(x,y){
   }
   return best;
 }
+// ?dbg in the address shows the sizes this browser reports, for a screenshot when the layout is wrong on some device
+const DBG=/[?&]dbg\b/.test(location.search); let dbgEl=null, dbgTouch='';
+function dbgShow(){
+  if (!dbgEl){ dbgEl=document.createElement('pre'); dbgEl.style.cssText='position:fixed;left:6px;top:64px;margin:0;padding:6px 8px;z-index:40;pointer-events:none;background:#000c;color:#fff;font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;border-radius:8px'; document.body.appendChild(dbgEl); }
+  const v=window.visualViewport, b=$('bar').getBoundingClientRect(), r=cv.getBoundingClientRect(), n=x=>Math.round(x*10)/10;
+  dbgEl.textContent=
+    'window '+innerWidth+'x'+innerHeight+'  screen '+screen.width+'x'+screen.height+'  scroll '+n(scrollX)+','+n(scrollY)+'\n'+
+    'visual '+(v?n(v.width)+'x'+n(v.height)+' scale '+n(v.scale)+' at '+n(v.offsetLeft)+','+n(v.offsetTop):'none')+'\n'+
+    'canvas box '+n(r.left)+','+n(r.top)+' '+n(r.width)+'x'+n(r.height)+'  client '+cv.clientWidth+'x'+cv.clientHeight+'  pixels '+cv.width+'x'+cv.height+'  dpr '+n(window.devicePixelRatio)+'\n'+
+    'game '+cw+'x'+ch+'  toolbar top '+n(b.top)+' height '+n(b.height)+'  home bar '+$('sa').offsetHeight+'\n'+
+    (G?'view scale '+n(V.s)+' min '+n(V.min)+' at '+n(V.x)+','+n(V.y)+'  map '+G.M.W+'x'+G.M.H+'\n':'')+
+    'last touch '+dbgTouch;
+}
+if (DBG) addEventListener('pointerdown',e=>{ const t=e.target.closest && e.target.closest('[id]'); dbgTouch=(t?t.id:'?')+' '+Math.round(e.clientX)+','+Math.round(e.clientY)+' '+e.pointerType; },true);
 function refit(){
   if (cv.clientWidth===cw && cv.clientHeight===ch && Math.min(window.devicePixelRatio||1,2)===dpr) return;
   closePop();
