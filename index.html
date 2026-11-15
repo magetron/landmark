@@ -150,7 +150,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
   <button class="plain hidden" id="leave">Leave lobby</button>
   <button class="plain hidden" id="toMp">Multiplayer</button>
   <div id="lan" class="hidden"></div>
-  <form id="join"><input id="addr" placeholder="192.168.x.x:8080" inputmode="url" autocomplete="off" autocapitalize="off" aria-label="Server address"><button aria-label="Join server">⇄</button></form>
+  <form id="join"><input id="addr" placeholder="landmark-server.patrickwu.uk" inputmode="url" autocomplete="off" autocapitalize="off" aria-label="Server address"><button aria-label="Join server">⇄</button></form>
   <button class="plain" id="resume" style="display:none">Resume</button>
   <button class="plain" id="helpBtn">?</button>
 </div></div>
@@ -1435,7 +1435,8 @@ function renderMenu(){
   for (const b of $('diff').children) b.classList.toggle('on',b.dataset.d===cfg.diff);
   for (const b of $('nb').children) b.classList.toggle('on',+b.dataset.n===cfg.bots);
   $('nm').classList.toggle('need',!myName());
-  if (NET) $('lan').innerHTML='Others join at <b>http://'+NET.lan+'</b>';
+  const here=location.protocol==='https:' ? location.origin : 'http://'+(NET && NET.lan);    // through the tunnel, share its address, not the LAN one
+  if (NET) $('lan').innerHTML='Others join at <b>'+here+'</b>';
   if (mode==='entry')
     $('rooms').innerHTML=NET.rooms.map(q=>'<button data-r="'+q.code+'"><b>'+(clean(q.host)||'?')+'</b>’s lobby · '+q.n+(q.n===1?' player':' players')+(q.running?' · playing':'')+'</button>').join('');
   if (mode==='room'){
@@ -1446,7 +1447,7 @@ function renderMenu(){
       : host ? (r.running ? 'Match running.' : 'Pick a map, then press Start.')
       : r.running ? 'Match running.' : 'Waiting for '+hn+' to start.';
     $('go').textContent=r.running ? 'Start a new match' : 'Start';
-    $('link').value='http://'+NET.lan+'/?room='+r.code;
+    $('link').value=here+'/?room='+r.code;
   }
 }
 $('maps').addEventListener('click',e=>{
@@ -1499,14 +1500,17 @@ $('askN').addEventListener('click',()=>answer('no'));
 $('atk').addEventListener('pointerdown',e=>{ const b=e.target.closest('button'); if (!b) return; act({k:'retreat',a:+b.dataset.a}); hud(); });
 $('speed').addEventListener('click',()=>{ speed=speed===1?2:speed===2?4:1; $('speed').textContent='×'+speed; });
 $('menuBtn').addEventListener('click',()=>{ buildMenu(); paused=true; $('menu').classList.remove('hidden'); });
-// the laptop that usually hosts; the box starts on it so joining is one press. ?join=address in the link goes straight there
-const HOME_SERVER='192.168.50.53:8080';
-$('addr').value=save.addr||HOME_SERVER;
+// the server that usually hosts (the laptop, reached through its Cloudflare tunnel); the box starts on it so joining is one
+// press. ?join=address in the link goes straight there. A LAN address (an IP or localhost) is plain http on port 8080;
+// a name like the tunnel's is https on its default port.
+const HOME_SERVER='landmark-server.patrickwu.uk', OLD_HOME='192.168.50.53:8080';
+$('addr').value=(save.addr && save.addr!==OLD_HOME) ? save.addr : HOME_SERVER;
 $('join').addEventListener('submit',e=>{
   e.preventDefault();
   let a=$('addr').value.trim().replace(/^https?:\/\//,'').replace(/\/.*$/,''); if (!/^[\w.-]+(:\d+)?$/.test(a)) return;
-  if (!a.includes(':')) a+=':8080';
-  save.addr=a; persist(); location.href='http://'+a+'/';
+  const lan=/^(\d+\.){3}\d+(:\d+)?$|^localhost(:\d+)?$/.test(a);
+  if (lan && !a.includes(':')) a+=':8080';
+  save.addr=a; persist(); location.href=(lan?'http://':'https://')+a+'/';
 });
 $('nm').addEventListener('input',()=>{
   save.name=clean($('nm').value); persist(); $('nm').classList.toggle('need',!save.name);
