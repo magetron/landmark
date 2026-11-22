@@ -106,6 +106,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
     <span id="rv">20%</span><input id="ratio" type="range" min="5" max="100" step="5" value="20" aria-label="Attack ratio">
     <button id="aCity" class="bld" aria-label="Build city">▣ <span></span></button>
     <button id="aFort" class="bld" aria-label="Build defence post">◆ <span></span></button>
+    <button id="aSam" class="bld" aria-label="Build air defence"><i>🛡️</i> <span></span></button>
     <button id="aNuke" class="bld" aria-label="Missiles"><i>🚀</i> <span></span></button>
     <button id="menuBtn" aria-label="Menu">☰</button>
   </div>
@@ -314,11 +315,12 @@ const FL = {
 };
 // nation troop cap and growth by difficulty are OpenFront's (Config.troopCap, troopIncreaseRate)
 // 'bias' is how often a nation that you have not attacked will go for you rather than leave you be
-// Easy and Normal sit close together on purpose: results swing sharply with these numbers. The larger
-// difference is diplomacy (on Normal nations refuse runaway leaders, court the strong, and will betray you).
-// Hard's cap was 1 (OpenFront's); at .8 a scripted player wins about one match in eight instead of one in thirty.
-const DIFF = {easy:{cap:.57,grow:.87,start:14000,think:[40,64],bias:.3}, normal:{cap:.6,grow:.88,start:15000,think:[36,58],bias:.38}, hard:{cap:.8,grow:1,start:25000,think:[12,20],bias:1}};
-const GRACE={easy:700,normal:600,hard:50};
+// Results swing sharply with these numbers. On Normal nations also refuse runaway leaders, court the strong, and
+// will betray you. Hard's cap was 1 (OpenFront's). Normal's numbers sit about halfway between Easy's and Hard's:
+// in scripted matches on Europe (9 nations, every flavour, 12 seeds) the scripted player won 100% on Easy,
+// about 70% on Normal (92% with Normal's old numbers, which were close to Easy's) and about 40% on Hard.
+const DIFF = {easy:{cap:.57,grow:.87,start:14000,think:[40,64],bias:.3}, normal:{cap:.7,grow:.94,start:20000,think:[24,39],bias:.69}, hard:{cap:.8,grow:1,start:25000,think:[12,20],bias:1}};
+const GRACE={easy:700,normal:325,hard:50};
 const GOLD=300, GOLD_LAND=2500;                 // gold a tick: a base, plus more the larger your share of the land
 const ALLY_T=3000, REQ_COOL=300, ASK_T=200, TRAITOR_T=300, RETREAT=.75;
 const COLS = ['#000000','#ffd23f','#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#9a6324','#008080','#bfef45','#fabed4','#800000','#aaffc3','#dcbeff','#808000'];
@@ -1046,7 +1048,7 @@ function tapCell(c,byBoat){
   const g=G, me=g.players[ME], o=g.owner[c];
   if (!me.spawned){ if (o===0) act({k:'spawn',c}); return; }
   if (g.phase!=='play' || !me.alive) return;
-  if (armed){ if (armed>=3){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-3}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
+  if (armed){ if (armed>=4){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-4}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
   // while there is unclaimed land next to you a tap on your own land pushes into it; the bar buttons build
   if (!byBoat){ const s=samNear(tapX,tapY); if (s>=0){ ringAt=s; return; } }          // a tap on your air defence shows how far it reaches
   if (o===ME && !(g.adj[ME*g.n1]>0)){ if (!g.bld[c] && me.gold>=Math.min(cityCost(me),fortCost(me))) openPop(c); return; }
@@ -1151,7 +1153,7 @@ function draw(){
     if (g.bld[c]===2){ ctx.beginPath(); ctx.arc(x,y,POST_R*M.sc*V.s,0,6.3); ctx.fillStyle='rgba(0,0,0,.12)'; ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=1; ctx.stroke(); }
     if (g.bld[c]===3){
       const live=g.rdy[c]<=g.tick, q=r*1.25;
-      if (c===ringAt || (armed>=3 && o!==ME && !allied(ME,o))){
+      if (c===ringAt || (armed>=4 && o!==ME && !allied(ME,o))){
         ctx.beginPath(); ctx.arc(x,y,samR()*V.s,0,6.3); ctx.fillStyle='rgba(120,200,255,'+(live?.1:.04)+')'; ctx.fill();
         ctx.strokeStyle='rgba(10,40,70,'+(live?.45:.15)+')'; ctx.lineWidth=4; ctx.stroke();
         ctx.setLineDash([4,5]); ctx.strokeStyle='rgba(170,230,255,'+(live?1:.4)+')'; ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([]);
@@ -1185,10 +1187,10 @@ function draw(){
     ctx.lineCap='round'; ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=5; ctx.stroke(); ctx.strokeStyle='#ffb347'; ctx.lineWidth=3; ctx.stroke(); ctx.lineCap='butt';
     ctx.beginPath(); ctx.arc(ax(k),ay(k),5.5+2.5*m.w,0,6.3); ctx.fillStyle=COLS[m.p]; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
   }
-  if (armed>=3 && sight){
+  if (armed>=4 && sight){
     const c=cellAt(sight.x,sight.y), o=c>=0?owner[c]:0, ok=o>0 && o!==ME && !allied(ME,o);
     const x=c>=0?V.x+(c%W+.5)*V.s:sight.x, y=c>=0?V.y+(((c/W)|0)+.5)*V.s:sight.y;
-    ctx.beginPath(); ctx.arc(x,y,Math.round(ARMS[armed-3].r*Math.sqrt(M.k))*V.s,0,6.3);
+    ctx.beginPath(); ctx.arc(x,y,Math.round(ARMS[armed-4].r*Math.sqrt(M.k))*V.s,0,6.3);
     ctx.fillStyle=ok?'rgba(255,60,40,.14)':'rgba(255,255,255,.1)'; ctx.fill();
     ctx.setLineDash([6,4]); ctx.strokeStyle=ok?'#ff4a34':'rgba(255,255,255,.75)'; ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([]);
   }
@@ -1233,9 +1235,9 @@ function hud(){
   const cc=cityCost(me), fc=fortCost(me);
   $('bCity').lastElementChild.textContent=fmt(cc); $('bFort').lastElementChild.textContent=fmt(fc); $('bSam').lastElementChild.textContent=fmt(samCost(me));
   $('bCity').disabled=me.gold<cc; $('bFort').disabled=me.gold<fc; $('bSam').disabled=me.gold<samCost(me);
-  const wp=ARMS[armed>=3?armed-3:0]; $('aNuke').firstElementChild.textContent=wp.ico;
+  const wp=ARMS[armed>=4?armed-4:0]; $('aNuke').firstElementChild.textContent=wp.ico;
   for (const b of $('arms').children) b.disabled=me.gold<ARMS[b.dataset.w].cost;
-  for (const [id,cost,t] of [['aCity',cc,1],['aFort',fc,2],['aNuke',wp.cost,armed>=3?armed:3]]){
+  for (const [id,cost,t] of [['aCity',cc,1],['aFort',fc,2],['aSam',samCost(me),3],['aNuke',wp.cost,armed>=4?armed:4]]){
     const b=$(id), k=Math.min(1,me.gold/cost); b.lastElementChild.textContent=fmt(cost);
     b.classList.toggle('ready',k>=1); b.classList.toggle('on',armed===t);
     b.style.background=armed===t?'#ffd23f':'linear-gradient(90deg,#4b5a3a '+(k*100)+'%,#2a313b '+(k*100)+'%)';
@@ -1292,7 +1294,7 @@ cv.addEventListener('pointerdown',e=>{
   swallow=popCell>=0 || !$('arms').classList.contains('hidden'); closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
   pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); clearTimeout(pressT);
   if (pts.size===1){
-    moved=false; sx=e.clientX; sy=e.clientY; aiming=armed>=3 && !swallow;
+    moved=false; sx=e.clientX; sy=e.clientY; aiming=armed>=4 && !swallow;
     if (aiming) sight={x:sx,y:sy};
     else { const x=sx, y=sy; pressT=setTimeout(()=>{ if (pts.size===1 && !moved){ swallow=true; longPress(x,y); } },450); }
   } else { moved=true; aiming=false; sight=null; }
@@ -1300,7 +1302,7 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('contextmenu',e=>{ e.preventDefault(); clearTimeout(pressT); swallow=true; longPress(e.clientX,e.clientY); });
 cv.addEventListener('pointermove',e=>{
   const p=pts.get(e.pointerId);
-  if (!p){ sight=armed>=3 && e.pointerType==='mouse' ? {x:e.clientX,y:e.clientY} : null; return; }
+  if (!p){ sight=armed>=4 && e.pointerType==='mouse' ? {x:e.clientX,y:e.clientY} : null; return; }
   if (!G) return;
   if (pts.size===1){
     if (!moved && Math.hypot(e.clientX-sx,e.clientY-sy)>12){ moved=true; clearTimeout(pressT); }
@@ -1368,9 +1370,9 @@ document.addEventListener('touchmove',e=>{ if (e.touches.length>1) e.preventDefa
 /* ---------- menus ---------- */
 const clean = s => String(s||'').replace(/[<>&"']/g,'').trim().slice(0,14);
 const myName = () => clean(save.name);
-// a bar button arms a building (1 city, 2 post) or a weapon (3 missile, 4 nuke); the next tap places it on your own
+// a bar button arms a building (1 city, 2 post, 3 air defence) or a weapon (4 missile, 5 nuke); the next tap places it on your own
 // land, or fires at another nation's
-const priceOf = (t,P) => t===1 ? cityCost(P) : t===2 ? fortCost(P) : ARMS[t-3].cost;
+const priceOf = (t,P) => t===1 ? cityCost(P) : t===2 ? fortCost(P) : t===3 ? samCost(P) : ARMS[t-4].cost;
 function arm(t){ const me=G.players[ME]; armed=(!t || armed===t || me.gold<priceOf(t,me))?0:t; hud(); }
 // tapping your own land offers what can be built there
 function openPop(c){ if (G.bld[c]) return; popCell=c; const e=$('pop'); e.style.left=within(tapX,130,cw-130)+'px'; e.style.top=Math.max(110,tapY)+'px'; e.classList.remove('hidden'); hud(); }
@@ -1480,18 +1482,18 @@ $('toMp').addEventListener('click',()=>{ NET.solo=false; renderMenu(); });
 $('ratio').addEventListener('input',()=>{ $('rv').textContent=$('ratio').value+'%'; });
 $('bCity').addEventListener('click',()=>{ act({k:'build',c:popCell,t:1}); closePop(); }); $('bFort').addEventListener('click',()=>{ act({k:'build',c:popCell,t:2}); closePop(); }); $('bSam').addEventListener('click',()=>{ act({k:'build',c:popCell,t:3}); closePop(); });
 $('zin').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1.6); clampView(); } }); $('zout').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1/1.6); clampView(); } });
-$('aCity').addEventListener('click',()=>arm(1)); $('aFort').addEventListener('click',()=>arm(2));
+$('aCity').addEventListener('click',()=>arm(1)); $('aFort').addEventListener('click',()=>arm(2)); $('aSam').addEventListener('click',()=>arm(3));
 // the missile button offers the weapons; picking one arms it, and the next tap on another nation fires it
 $('arms').innerHTML=ARMS.map((a,i)=>'<button data-w="'+i+'" aria-label="'+a.name+'"><b>'+a.ico+'</b><span>'+fmt(a.cost)+'</span></button>').join('');
 $('aNuke').addEventListener('click',()=>{
   const e=$('arms'), open=!e.classList.contains('hidden'); closePop();
-  if (armed>=3){ arm(armed); return; }
+  if (armed>=4){ arm(armed); return; }
   if (open) return;
   e.classList.remove('hidden'); hud();
   const r=$('aNuke').getBoundingClientRect(), w=e.offsetWidth/2+8;
   e.style.left=within(r.left+r.width/2,w,cw-w-48)+'px'; e.style.top=($($('ask').classList.contains('hidden')?'bar':'ask').getBoundingClientRect().top-8)+'px';      // clear of the zoom buttons and of a request waiting for an answer
 });
-$('arms').addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b || b.disabled) return; closePop(); arm(3+ +b.dataset.w); });
+$('arms').addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b || b.disabled) return; closePop(); arm(4+ +b.dataset.w); });
 $('nAlly').addEventListener('click',()=>{ const o=natWho; if (o>0 && o!==ME && G.players[o].alive) act(allied(ME,o)?{k:'break',q:o}:{k:'req',q:o}); closePop(); });
 $('nBoat').addEventListener('click',()=>{ const o=natWho, c=o>0 && natCell>=0 ? cellOf(o,natCell) : -1; closePop(); if (c>=0) tapCell(c,true); });
 function answer(k){ const a=G.players[ME].asks.find(a=>a.from===askFrom); if (!a) return; answered[a.from]=a.until; act({k,q:a.from}); hud(); }
