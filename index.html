@@ -350,6 +350,7 @@ const POST_MAG=5, POST_SPEED=3, POST_R=8, CITY_TROOPS=250000;
 // weapons bought with gold: price, blast radius in cells on the world map (wider on bigger maps), and the share
 // of its troops a nation loses per share of its land hit. Both fly MISSILE_V cells a tick.
 const ARMS=[{name:'Missile',ico:'🚀',cost:150000,r:10,kill:2},{name:'Nuke',ico:'☢️',cost:750000,r:26,kill:2}], MISSILE_V=6;
+const WPN=10;                                  // armed: 1-4 a building, WPN and up a weapon
 // Fallout (after OpenFront's falloutDefenseModifier): land a blast empties stays fallout until someone takes it, and
 // taking it costs this many times the troops and the time: 5, less 2 times the share of the map's land in fallout
 const fallMod = () => 5-2*G.falls/G.M.total;
@@ -357,6 +358,11 @@ const fallMod = () => 5-2*G.falls/G.M.total;
 // circle, whoever the weapon is aimed at, then reloads. Price (rising with each one a nation has, to a cap), reach in
 // cells on the world map (wider on bigger maps, like a blast), and ticks to reload.
 const SAM_COST=300000, SAM_MAX=900000, SAM_R=40, SAM_T=100;
+// Port (building 4, on the coast): it trades with the ports of other nations at peace with it, PORT_GOLD a tick
+// for each, an ally's counting twice, up to PORT_MAX for each port. A nation with a port sails PORT_V times as fast.
+const PORT_COST=100000, PORT_GOLD=30, PORT_MAX=8, PORT_V=1.5;
+const portCost = P => Math.min(1e6, Math.round(PORT_COST*pw(1.5,P.ports)/1000)*1000);
+const coastal = c => { const M=G.M; for (let k=0;k<4;k++){ const d=nbr(M,c,k); if (d>=0 && M.water[d]) return true; } return false; };
 const samCost = P => Math.min(SAM_MAX, SAM_COST*(P.sams+1)), samR = () => Math.round(SAM_R*Math.sqrt(G.M.k));
 let LOSS=5, LOSSP=2.5, PACE=1.2;                               // rescale for quarter-size grids
 const within=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -385,7 +391,7 @@ function newGame(M, diff, seed, nbots, humans){
   const keys = Object.keys(FL), nat = M.nations.slice();
   for (let i=keys.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [keys[i],keys[j]]=[keys[j],keys[i]]; }
   for (let i=nat.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [nat[i],nat[j]]=[nat[j],nat[i]]; }
-  const mk = (id,name,x) => Object.assign({id,name,tiles:0,troops:0,gold:0,alive:false,lastHit:0,cities:0,forts:[],sams:0,traitor:0,asks:[],spawned:false},x);
+  const mk = (id,name,x) => Object.assign({id,name,tiles:0,troops:0,gold:0,alive:false,lastHit:0,cities:0,forts:[],sams:0,ports:0,trade:0,traitor:0,asks:[],spawned:false},x);
   const players = [mk(0,'',{tiles:M.total})];
   humans.forEach((nm,i)=>players.push(mk(i+1,nm,{human:true})));
   const H = humans.length;
@@ -415,7 +421,7 @@ function give(c,p){
   const a=A.id, n1=g.n1, adj=g.adj, owner=g.owner;
   A.tiles--; B.tiles++; owner[c]=p;
   if (p && g.fall[c]){ g.fall[c]=0; g.falls--; }           // taken: no longer fallout
-  if (b===1){ A.cities--; B.cities++; } else if (b===2){ A.forts.splice(A.forts.indexOf(c),1); B.forts.push(c); } else if (b===3){ A.sams--; B.sams++; }
+  if (b===1){ A.cities--; B.cities++; } else if (b===2){ A.forts.splice(A.forts.indexOf(c),1); B.forts.push(c); } else if (b===3){ A.sams--; B.sams++; } else if (b===4){ A.ports--; B.ports++; }
   // adj[x][y] counts the places where x's land meets y's, fords included
   for (let k=0;k<4;k++){
     let d=nbr(M,c,k); if (d<0) continue;
@@ -673,7 +679,7 @@ function routeTo(p, L){
   return null;
 }
 const boatsOf = p => G.boats.reduce((n,b)=>n+(!b.dead && b.p===p),0);
-function sail(P,path,amt){ P.troops-=amt; G.boats.push({p:P.id,path,i:0,troops:amt}); }
+function sail(P,path,amt){ P.troops-=amt; G.boats.push({p:P.id,path,i:0,troops:amt,v:P.ports?PORT_V:1}); }
 function landBoat(b){
   const g=G, P=g.players[b.p], c=b.path[b.path.length-1], o=g.owner[c];
   if (!P.alive) return;
@@ -687,10 +693,10 @@ function landBoat(b){
   if (o>0 && D.tiles===0) eliminate(D,P);
 }
 function build(p,c,type){
-  const g=G, P=g.players[p], cost=type===1?cityCost(P):type===2?fortCost(P):samCost(P);
-  if (g.owner[c]!==p || g.bld[c] || P.gold<cost) return false;
+  const g=G, P=g.players[p], cost=type===1?cityCost(P):type===2?fortCost(P):type===3?samCost(P):portCost(P);
+  if (g.owner[c]!==p || g.bld[c] || P.gold<cost || (type===4 && !coastal(c))) return false;
   P.gold-=cost; g.bld[c]=type; g.blds.push(c);
-  if (type===1) P.cities++; else if (type===2) P.forts.push(c); else { P.sams++; g.rdy[c]=0; }       // rdy: the tick an air defence is loaded again
+  if (type===1) P.cities++; else if (type===2) P.forts.push(c); else if (type===3){ P.sams++; g.rdy[c]=0; } else P.ports++;       // rdy: the tick an air defence is loaded again
   return true;
 }
 /* ---------- missiles ---------- */
@@ -724,7 +730,7 @@ function blast(m){
     const X=x0+dx, Y=y0+dy; if (X<0||Y<0||X>=W||Y>=H) continue;
     const c=Y*W+X, o=owner[c]; if (o===0 || o===m.p || allied(m.p,o)) continue;
     const b=g.bld[c];
-    if (b){ const D=g.players[o]; if (b===1) D.cities--; else if (b===2) D.forts.splice(D.forts.indexOf(c),1); else { D.sams--; g.rdy[c]=0; } g.bld[c]=0; g.blds.splice(g.blds.indexOf(c),1); }
+    if (b){ const D=g.players[o]; if (b===1) D.cities--; else if (b===2) D.forts.splice(D.forts.indexOf(c),1); else if (b===3){ D.sams--; g.rdy[c]=0; } else D.ports--; g.bld[c]=0; g.blds.splice(g.blds.indexOf(c),1); }
     give(c,0); g.fall[c]=1; g.falls++; lost[o]++;
   }
   // where the signs go (drawing only): the middle, then two rings of six, each moved to fallout close by
@@ -879,6 +885,7 @@ function think(P){
       }
     }
   }
+  else if (P.cities && P.ports<(fl.sailor?3:1+(P.cities>>1)) && P.gold>=portCost(P) && portCost(P)<=cityCost(P)){ const c=pickCell(p,c=>coastal(c)); if (c>=0) build(p,c,4); }
   else if (P.gold>=cityCost(P)){ const c=pickCell(p,c=>ownNb(c,p)===4); if (c>=0 && build(p,c,1) && arms) P.want=nextWant(P); }
   if (fl.builder && P.forts.length<5 && P.gold>=fortCost(P)+cityCost(P) && nb.length){ const Q=nb[(g.rnd()*nb.length)|0], c=pickCell(p,c=>touches(c,Q.id)); if (c>=0) build(p,c,2); }
   if (mine.length>=(fl.multi||2)) return;
@@ -920,7 +927,17 @@ function think(P){
 function advance(f){
   const g=G;
   for (let i=0;i<g.attacks.length;i++) if (!g.attacks[i].dead) runAttack(g.attacks[i],f);
-  for (let i=0;i<g.boats.length;i++){ const b=g.boats[i]; if (b.dead) continue; b.i+=.5*g.M.sc*f; if (b.i>=b.path.length-1){ b.dead=true; landBoat(b); } }
+  for (let i=0;i<g.boats.length;i++){ const b=g.boats[i]; if (b.dead) continue; b.i+=.5*g.M.sc*f*(b.v||1); if (b.i>=b.path.length-1){ b.dead=true; landBoat(b); } }
+}
+// two nations trade while neither is attacking the other
+function trade(){
+  const g=G, n1=g.n1, war=new Uint8Array(n1*n1);
+  for (const a of g.attacks) if (!a.dead && a.to>0){ war[a.from*n1+a.to]=1; war[a.to*n1+a.from]=1; }
+  for (const P of g.players){
+    P.trade=0; if (!P.alive || !P.ports) continue;
+    let n=0; for (const Q of g.players) if (Q!==P && Q.alive && Q.ports && Q.id && !war[P.id*n1+Q.id]) n+=Q.ports*(allied(P.id,Q.id)?2:1);
+    P.trade=PORT_GOLD*P.ports*Math.min(PORT_MAX,n);
+  }
 }
 function tick(){
   const g=G; g.tick++; g.tat=performance.now();       // tat: when, for drawing between ticks
@@ -934,11 +951,12 @@ function tick(){
     return;
   }
   if (g.tick%8===1) scan();
+  if (g.tick%10===0) trade();
   for (const P of g.players) if (P.alive){
     const cap=capOf(P), m=P.human?1:g.dm.grow;
     if (P.troops<cap) P.troops=Math.min(cap,P.troops+(10+pw(P.troops,.73)/4)*(1-P.troops/cap)*m);
     else P.troops-=(P.troops-cap)*.02;
-    P.gold+=GOLD+GOLD_LAND*P.tiles/g.M.total;
+    P.gold+=GOLD+GOLD_LAND*P.tiles/g.M.total+P.trade;
   }
   for (const P of g.players) if (P.alive && P.fl && g.tick>=P.next){
     think(P); const [a,b]=g.dm.think; P.next=g.tick+a+((g.rnd()*(b-a))|0);
@@ -1007,7 +1025,7 @@ function apply(p,it){
       scan(); if (p===ME) focusOn(it.c);
       break;
     case 'tap': if (P.alive && cell(it.c)) doTap(p,it.c,+it.f,!!it.boat); break;
-    case 'build': if (P.alive && cell(it.c) && (it.t===1 || it.t===2 || it.t===3)) build(p,it.c,it.t); break;
+    case 'build': if (P.alive && cell(it.c) && [1,2,3,4].includes(it.t)) build(p,it.c,it.t); break;
     case 'nuke': if (P.alive && cell(it.c) && (it.w===0 || it.w===1)) launch(p,it.c,it.w); break;
     case 'req': if (P.alive && Number.isInteger(it.q) && it.q>0 && it.q<g.n1 && it.q!==p && g.players[it.q].alive) request(p,it.q); break;
     // the answer names who it is for, so it can never land on a different request
@@ -1064,11 +1082,21 @@ function samNear(x,y){
   for (const b of g.blds) if (g.bld[b]===3 && g.owner[b]===ME){ const dx=V.x+(b%W+.5)*V.s-x, dy=V.y+(((b/W)|0)+.5)*V.s-y, d=dx*dx+dy*dy; if (d<bd){ bd=d; best=b; } }
   return best;
 }
+// my free coast nearest to c, within about a finger of it
+function coastNear(c){
+  const g=G, M=g.M, W=M.W, x0=c%W, y0=(c/W)|0, R=Math.max(1,Math.ceil(22/V.s)); let best=-1, bd=1e9;
+  for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++){
+    const X=x0+dx, Y=y0+dy, d2=dx*dx+dy*dy; if (X<0||Y<0||X>=W||Y>=M.H || d2>R*R || d2>=bd) continue;
+    const e=Y*W+X; if (M.land[e] && g.owner[e]===ME && !g.bld[e] && coastal(e)){ bd=d2; best=e; }
+  }
+  return best;
+}
 function tapCell(c,byBoat){
   const g=G, me=g.players[ME], o=g.owner[c];
   if (!me.spawned){ if (o===0) act({k:'spawn',c}); return; }
   if (g.phase!=='play' || !me.alive) return;
-  if (armed){ if (armed>=4){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-4}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
+  if (armed===4){ const d=coastNear(c); if (d<0){ toast('⚓ Tap your coast'); return; } act({k:'build',c:d,t:4}); arm(0); return; }
+  if (armed){ if (armed>=WPN){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-WPN}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
   // while there is unclaimed land next to you a tap on your own land pushes into it; otherwise it does nothing.
   // Building is only through the 🏗️ bar button.
   if (!byBoat){ const s=samNear(tapX,tapY); if (s>=0){ ringAt=s; return; } }          // a tap on your air defence shows how far it reaches
@@ -1174,7 +1202,7 @@ function draw(){
     if (g.bld[c]===2){ ctx.beginPath(); ctx.arc(x,y,POST_R*M.sc*V.s,0,6.3); ctx.fillStyle='rgba(0,0,0,.12)'; ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=1; ctx.stroke(); }
     if (g.bld[c]===3){
       const live=g.rdy[c]<=g.tick, q=r*1.25;
-      if (c===ringAt || (armed>=4 && o!==ME && !allied(ME,o))){
+      if (c===ringAt || (armed>=WPN && o!==ME && !allied(ME,o))){
         ctx.beginPath(); ctx.arc(x,y,samR()*V.s,0,6.3); ctx.fillStyle='rgba(120,200,255,'+(live?.1:.04)+')'; ctx.fill();
         ctx.strokeStyle='rgba(10,40,70,'+(live?.45:.15)+')'; ctx.lineWidth=4; ctx.stroke();
         ctx.setLineDash([4,5]); ctx.strokeStyle='rgba(170,230,255,'+(live?1:.4)+')'; ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([]);
@@ -1184,6 +1212,13 @@ function draw(){
       ctx.fillStyle='#f4f8fb'; ctx.fill(); ctx.strokeStyle=COLS[o]; ctx.lineWidth=2.5; ctx.lineJoin='round'; ctx.stroke();
       ctx.beginPath(); ctx.arc(x,y+q*.15,q*.38,0,6.3); ctx.fillStyle=COLS[o]; ctx.fill();
       ctx.globalAlpha=1; continue;
+    }
+    if (g.bld[c]===4){
+      const q=r*1.35; ctx.beginPath(); ctx.arc(x,y,q,0,6.3); ctx.fillStyle=COLS[o]; ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(1.2,q*.22); ctx.lineCap='round'; ctx.beginPath();
+      ctx.moveTo(x,y-q*.6); ctx.lineTo(x,y+q*.6); ctx.moveTo(x-q*.35,y-q*.25); ctx.lineTo(x+q*.35,y-q*.25);
+      ctx.moveTo(x-q*.55,y+q*.15); ctx.quadraticCurveTo(x-q*.45,y+q*.6,x,y+q*.6); ctx.quadraticCurveTo(x+q*.45,y+q*.6,x+q*.55,y+q*.15);
+      ctx.stroke(); ctx.lineCap='butt'; continue;
     }
     ctx.fillStyle=COLS[o]; ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.beginPath();
     if (g.bld[c]===1) ctx.rect(x-r,y-r,2*r,2*r);
@@ -1208,10 +1243,10 @@ function draw(){
     ctx.lineCap='round'; ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=5; ctx.stroke(); ctx.strokeStyle='#ffb347'; ctx.lineWidth=3; ctx.stroke(); ctx.lineCap='butt';
     ctx.beginPath(); ctx.arc(ax(k),ay(k),5.5+2.5*m.w,0,6.3); ctx.fillStyle=COLS[m.p]; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
   }
-  if (armed>=4 && sight){
+  if (armed>=WPN && sight){
     const c=cellAt(sight.x,sight.y), o=c>=0?owner[c]:0, ok=o>0 && o!==ME && !allied(ME,o);
     const x=c>=0?V.x+(c%W+.5)*V.s:sight.x, y=c>=0?V.y+(((c/W)|0)+.5)*V.s:sight.y;
-    ctx.beginPath(); ctx.arc(x,y,Math.round(ARMS[armed-4].r*Math.sqrt(M.k))*V.s,0,6.3);
+    ctx.beginPath(); ctx.arc(x,y,Math.round(ARMS[armed-WPN].r*Math.sqrt(M.k))*V.s,0,6.3);
     ctx.fillStyle=ok?'rgba(255,60,40,.14)':'rgba(255,255,255,.1)'; ctx.fill();
     ctx.setLineDash([6,4]); ctx.strokeStyle=ok?'#ff4a34':'rgba(255,255,255,.75)'; ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([]);
   }
@@ -1316,7 +1351,7 @@ cv.addEventListener('pointerdown',e=>{
   swallow=popCell>=0 || !$('tray').classList.contains('hidden') || performance.now()-gone<600; closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
   pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); clearTimeout(pressT);
   if (pts.size===1){
-    moved=false; sx=e.clientX; sy=e.clientY; aiming=armed>=4 && !swallow;
+    moved=false; sx=e.clientX; sy=e.clientY; aiming=armed>=WPN && !swallow;
     if (aiming) sight={x:sx,y:sy};
     else { const x=sx, y=sy; pressT=setTimeout(()=>{ if (pts.size===1 && !moved){ swallow=true; longPress(x,y); } },450); }
   } else { moved=true; aiming=false; sight=null; }
@@ -1324,7 +1359,7 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('contextmenu',e=>{ e.preventDefault(); clearTimeout(pressT); swallow=true; longPress(e.clientX,e.clientY); });
 cv.addEventListener('pointermove',e=>{
   const p=pts.get(e.pointerId);
-  if (!p){ sight=armed>=4 && e.pointerType==='mouse' ? {x:e.clientX,y:e.clientY} : null; return; }
+  if (!p){ sight=armed>=WPN && e.pointerType==='mouse' ? {x:e.clientX,y:e.clientY} : null; return; }
   if (!G) return;
   if (pts.size===1){
     if (!moved && Math.hypot(e.clientX-sx,e.clientY-sy)>12){ moved=true; clearTimeout(pressT); }
@@ -1397,10 +1432,10 @@ const clean = s => String(s||'').replace(/[<>&"']/g,'').trim().slice(0,14);
 const myName = () => clean(save.name);
 // The 🏗️ bar button opens a tray of buildings (1 city, 2 post, 3 air defence), the 🚀 one a tray of weapons
 // (4 missile, 5 nuke). Picking one arms it: the next tap places it on your own land, or fires at another nation's.
-const BUILDS=Object.assign([{t:1,ico:'▣',name:'City'},{t:2,ico:'◆',name:'Defence post'},{t:3,ico:'🛡️',name:'Air defence'}],{ico:'🏗️'});
-const WEAPONS=Object.assign(ARMS.map((a,i)=>({t:4+i,ico:a.ico,name:a.name})),{ico:ARMS[0].ico});
+const BUILDS=Object.assign([{t:1,ico:'▣',name:'City'},{t:2,ico:'◆',name:'Defence post'},{t:3,ico:'🛡️',name:'Air defence'},{t:4,ico:'⚓',name:'Port'}],{ico:'🏗️'});
+const WEAPONS=Object.assign(ARMS.map((a,i)=>({t:WPN+i,ico:a.ico,name:a.name})),{ico:ARMS[0].ico});
 let trayOf='';                                // the bar button whose tray is open
-const priceOf = (t,P) => t===1 ? cityCost(P) : t===2 ? fortCost(P) : t===3 ? samCost(P) : ARMS[t-4].cost;
+const priceOf = (t,P) => t===1 ? cityCost(P) : t===2 ? fortCost(P) : t===3 ? samCost(P) : t===4 ? portCost(P) : ARMS[t-WPN].cost;
 function arm(t){ const me=G.players[ME]; armed=(!t || armed===t || me.gold<priceOf(t,me))?0:t; hud(); }
 function closePop(){ popCell=-1; natCell=-1; natWho=0; ringAt=-1; trayOf=''; $('nat').classList.add('hidden'); $('tray').classList.add('hidden'); }
 // long-press (or right-click, or a tap on an ally): the nation's card
@@ -1578,7 +1613,8 @@ $('flav').innerHTML=[
   ['Tap land','Send troops there. Across water they go by boat.'],
   ['Slider','Share of your troops each tap sends.'],
   ['Hold on a nation','Ally, break an alliance, or force a boat.'],
-  ['🏗️','City, defence post or air defence: pick one, then tap your land.'],
+  ['🏗️','City, defence post, air defence or port: pick one, then tap your land.'],
+  ['⚓','Port: goes on your coast. It trades with other nations\' ports for gold while you are at peace, and your boats sail faster.'],
   ['🚀','Missile or nuke: pick one, then tap another nation.'],
   ['→ ✕','Tap one of your attacks to call it off.'],
   ['Win','Be the last nation standing.'],
