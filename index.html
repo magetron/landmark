@@ -54,15 +54,13 @@ button.bld.on,button.bld.on span{color:#111}
 #natH{font-size:12px;margin:0 2px 6px;white-space:nowrap}#natH b{font-size:14px}
 #nat button{flex:1;font-size:18px;padding:8px 0}
 #atk button{font-size:12px;padding:1px 8px;min-width:0;border-radius:9px;margin-right:4px;background:#2a313b}
-#pop{position:fixed;display:flex;gap:8px;transform:translate(-50%,-115%);z-index:5}
-#pop.hidden{display:none}
-#arms{position:fixed;display:flex;gap:8px;transform:translate(-50%,-100%);z-index:5}
-#pop button,#arms button{width:74px;padding:8px 0 6px;border-radius:14px;background:#14181ef2;border:1px solid #fff4;box-shadow:0 4px 14px #0008;display:flex;flex-direction:column;align-items:center;gap:1px}
-#pop button b,#arms button b{font-size:20px;line-height:1}
-#pop button span,#arms button span{font-size:12px;color:#ffd23f;font-weight:700}
-#pop button:disabled,#arms button:disabled{opacity:.45}
+#tray{position:fixed;display:flex;gap:8px;transform:translate(-50%,-100%);z-index:5}
+#tray button{width:74px;padding:8px 0 6px;border-radius:14px;background:#14181ef2;border:1px solid #fff4;box-shadow:0 4px 14px #0008;display:flex;flex-direction:column;align-items:center;gap:1px}
+#tray button b{font-size:20px;line-height:1}
+#tray button span{font-size:12px;color:#ffd23f;font-weight:700}
+#tray button:disabled{opacity:.45}
 /* a margin round each popup that catches a finger which just misses a button, so it does not land on the map */
-#pop::after,#nat::after,#arms::after,#ask::after{content:'';position:absolute;inset:-14px -14px -8px;z-index:-1}
+#nat::after,#tray::after,#ask::after{content:'';position:absolute;inset:-14px -14px -8px;z-index:-1}
 .ico{width:26px;text-align:center;font-size:16px;color:#b9c6d6}
 .grid button{position:relative;aspect-ratio:16/10;padding:0;overflow:hidden;background:#2a313b center/cover no-repeat;border-color:#fff3}
 .grid button span{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 6px;background:linear-gradient(#0000,#000c);font-weight:700;font-size:13px;text-shadow:0 1px 2px #000}
@@ -106,9 +104,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
   <div class="row" id="res"><div id="meter"><div id="fill"></div><div id="mtxt"><span id="tr"></span></div></div><div id="gd"></div></div>
   <div class="row">
     <span id="rv">20%</span><input id="ratio" type="range" min="5" max="100" step="5" value="20" aria-label="Attack ratio">
-    <button id="aCity" class="bld" aria-label="Build city">▣ <span></span></button>
-    <button id="aFort" class="bld" aria-label="Build defence post">◆ <span></span></button>
-    <button id="aSam" class="bld" aria-label="Build air defence"><i>🛡️</i> <span></span></button>
+    <button id="aBld" class="bld" aria-label="Build"><i>🏗️</i> <span></span></button>
     <button id="aNuke" class="bld" aria-label="Missiles"><i>🚀</i> <span></span></button>
     <button id="menuBtn" aria-label="Menu">☰</button>
   </div>
@@ -119,12 +115,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
   <div id="natH"></div>
   <div class="row"><button id="nAlly"></button><button id="nBoat">⛵</button></div>
 </div>
-<div id="pop" class="hidden">
-  <button id="bCity" aria-label="Build city"><b>▣</b><span></span></button>
-  <button id="bFort" aria-label="Build defence post"><b>◆</b><span></span></button>
-  <button id="bSam" aria-label="Build air defence"><b>🛡️</b><span></span></button>
-</div>
-<div id="arms" class="hidden"></div>
+<div id="tray" class="hidden"></div>
 
 <div id="menu" class="sheet"><div class="card">
   <h1>LANDMARK</h1>
@@ -1054,9 +1045,10 @@ function tapCell(c,byBoat){
   if (!me.spawned){ if (o===0) act({k:'spawn',c}); return; }
   if (g.phase!=='play' || !me.alive) return;
   if (armed){ if (armed>=4){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-4}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
-  // while there is unclaimed land next to you a tap on your own land pushes into it; the bar buttons build
+  // while there is unclaimed land next to you a tap on your own land pushes into it; otherwise it does nothing.
+  // Building is only through the 🏗️ bar button.
   if (!byBoat){ const s=samNear(tapX,tapY); if (s>=0){ ringAt=s; return; } }          // a tap on your air defence shows how far it reaches
-  if (o===ME && !(g.adj[ME*g.n1]>0)){ if (!g.bld[c] && me.gold>=Math.min(cityCost(me),fortCost(me))) openPop(c); return; }
+  if (o===ME && !(g.adj[ME*g.n1]>0)) return;
   if (o!==ME && allied(ME,o)){ openNat(c); return; }
   act({k:'tap',c,f:$('ratio').value/100,boat:!!byBoat});
 }
@@ -1237,15 +1229,13 @@ function hud(){
   $('fill').style.width=Math.min(100,100*me.troops/cap)+'%';
   $('tr').textContent=wait?'':fmt(me.troops)+' / '+fmt(cap);
   $('gd').innerHTML=wait?'':'● '+fmt(me.gold)+'<i>+'+fmt((GOLD+GOLD_LAND*me.tiles/g.M.total)*10)+'/s</i>';
-  const cc=cityCost(me), fc=fortCost(me);
-  $('bCity').lastElementChild.textContent=fmt(cc); $('bFort').lastElementChild.textContent=fmt(fc); $('bSam').lastElementChild.textContent=fmt(samCost(me));
-  $('bCity').disabled=me.gold<cc; $('bFort').disabled=me.gold<fc; $('bSam').disabled=me.gold<samCost(me);
-  const wp=ARMS[armed>=4?armed-4:0]; $('aNuke').firstElementChild.textContent=wp.ico;
-  for (const b of $('arms').children) b.disabled=me.gold<ARMS[b.dataset.w].cost;
-  for (const [id,cost,t] of [['aCity',cc,1],['aFort',fc,2],['aSam',samCost(me),3],['aNuke',wp.cost,armed>=4?armed:4]]){
-    const b=$(id), k=Math.min(1,me.gold/cost); b.lastElementChild.textContent=fmt(cost);
-    b.classList.toggle('ready',k>=1); b.classList.toggle('on',armed===t);
-    b.style.background=armed===t?'#ffd23f':'linear-gradient(90deg,#4b5a3a '+(k*100)+'%,#2a313b '+(k*100)+'%)';
+  for (const b of $('tray').children){ const c=priceOf(+b.dataset.t,me); b.lastElementChild.textContent=fmt(c); b.disabled=me.gold<c; }
+  // each bar button shows what is armed from its tray, or else the cheapest thing in it, and fills as gold comes in
+  for (const [id,list] of [['aBld',BUILDS],['aNuke',WEAPONS]]){
+    const b=$(id), on=list.find(x=>x.t===armed), cost=on?priceOf(on.t,me):Math.min(...list.map(x=>priceOf(x.t,me))), k=Math.min(1,me.gold/cost);
+    b.firstElementChild.textContent=on?on.ico:list.ico; b.lastElementChild.textContent=fmt(cost);
+    b.classList.toggle('ready',k>=1); b.classList.toggle('on',!!on);
+    b.style.background=on?'#ffd23f':'linear-gradient(90deg,#4b5a3a '+(k*100)+'%,#2a313b '+(k*100)+'%)';
   }
   $('bar').style.display=wait?'none':''; $('speed').style.display=g.mp?'none':'';
   const out=g.attacks.filter(a=>a.from===ME && !a.dead).map(a=>'<button data-a="'+a.id+'">→ '+(g.players[a.to].name||'land')+' '+fmt(a.troops)+' ✕</button>');
@@ -1299,7 +1289,7 @@ let sight=null, aiming=false;
 // `gone`: when a popup or the alliance prompt last went away by itself (the request ran out, the nation fell, the
 // phone turned). A press on the map in the next moment was meant for it, and only closes things.
 cv.addEventListener('pointerdown',e=>{
-  swallow=popCell>=0 || !$('arms').classList.contains('hidden') || performance.now()-gone<600; closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
+  swallow=popCell>=0 || !$('tray').classList.contains('hidden') || performance.now()-gone<600; closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
   pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); clearTimeout(pressT);
   if (pts.size===1){
     moved=false; sx=e.clientX; sy=e.clientY; aiming=armed>=4 && !swallow;
@@ -1362,10 +1352,10 @@ function dbgShow(){
 if (DBG) addEventListener('pointerdown',e=>{ const t=e.target.closest && e.target.closest('[id]'); dbgTouch=(t?t.id:'?')+' '+Math.round(e.clientX)+','+Math.round(e.clientY)+' '+e.pointerType; },true);
 function refit(){
   if (cv.clientWidth===cw && cv.clientHeight===ch && Math.min(window.devicePixelRatio||1,2)===dpr) return;
-  // the phone's own toolbars coming and going change only the height: popups stay open for that, the weapon tray
+  // the phone's own toolbars coming and going change only the height: popups stay open for that, and a tray
   // moves with the bar. A turn of the phone closes them.
-  if (cv.clientWidth!==cw){ if (popCell>=0 || !$('arms').classList.contains('hidden')) gone=performance.now(); closePop(); }
-  else if (!$('arms').classList.contains('hidden')) requestAnimationFrame(placeArms);
+  if (cv.clientWidth!==cw){ if (popCell>=0 || !$('tray').classList.contains('hidden')) gone=performance.now(); closePop(); }
+  else if (!$('tray').classList.contains('hidden')) requestAnimationFrame(placeTray);
   if (!G){ fit(); return; }
   const far=V.s<=V.min*1.02, mx=(cw/2-V.x)/V.s, my=(ch/2-V.y)/V.s, s=V.s;
   fit();
@@ -1381,13 +1371,14 @@ document.addEventListener('touchmove',e=>{ if (e.touches.length>1) e.preventDefa
 /* ---------- menus ---------- */
 const clean = s => String(s||'').replace(/[<>&"']/g,'').trim().slice(0,14);
 const myName = () => clean(save.name);
-// a bar button arms a building (1 city, 2 post, 3 air defence) or a weapon (4 missile, 5 nuke); the next tap places it on your own
-// land, or fires at another nation's
+// The 🏗️ bar button opens a tray of buildings (1 city, 2 post, 3 air defence), the 🚀 one a tray of weapons
+// (4 missile, 5 nuke). Picking one arms it: the next tap places it on your own land, or fires at another nation's.
+const BUILDS=Object.assign([{t:1,ico:'▣',name:'City'},{t:2,ico:'◆',name:'Defence post'},{t:3,ico:'🛡️',name:'Air defence'}],{ico:'🏗️'});
+const WEAPONS=Object.assign(ARMS.map((a,i)=>({t:4+i,ico:a.ico,name:a.name})),{ico:ARMS[0].ico});
+let trayOf='';                                // the bar button whose tray is open
 const priceOf = (t,P) => t===1 ? cityCost(P) : t===2 ? fortCost(P) : t===3 ? samCost(P) : ARMS[t-4].cost;
 function arm(t){ const me=G.players[ME]; armed=(!t || armed===t || me.gold<priceOf(t,me))?0:t; hud(); }
-// tapping your own land offers what can be built there
-function openPop(c){ if (G.bld[c]) return; popCell=c; const e=$('pop'); e.style.left=within(tapX,130,cw-130)+'px'; e.style.top=Math.max(110,tapY)+'px'; e.classList.remove('hidden'); hud(); }
-function closePop(){ popCell=-1; natCell=-1; natWho=0; ringAt=-1; $('pop').classList.add('hidden'); $('nat').classList.add('hidden'); $('arms').classList.add('hidden'); }
+function closePop(){ popCell=-1; natCell=-1; natWho=0; ringAt=-1; trayOf=''; $('nat').classList.add('hidden'); $('tray').classList.add('hidden'); }
 // long-press (or right-click, or a tap on an ally): the nation's card
 function openNat(c){
   const o=G.owner[c]; if (o<1 || o===ME) return; const Q=G.players[o];
@@ -1414,7 +1405,7 @@ function cellOf(o,c){
 function longPress(x,y){
   if (!G || G.phase!=='play' || !G.players[ME].alive) return; tapX=x; tapY=y;
   const c=cellAt(x,y); if (c<0) return;
-  if (G.owner[c]===ME) openPop(c); else openNat(c);
+  if (G.owner[c]!==ME) openNat(c);
 }
 // a name is needed before anything else; say so where the player is looking
 function needName(){
@@ -1491,22 +1482,22 @@ $('nm').addEventListener('change',()=>{ if (NET && NET.want && NET.id && myName(
 $('solo').addEventListener('click',()=>{ NET.solo=true; renderMenu(); });
 $('toMp').addEventListener('click',()=>{ NET.solo=false; renderMenu(); });
 $('ratio').addEventListener('input',()=>{ $('rv').textContent=$('ratio').value+'%'; });
-$('bCity').addEventListener('click',()=>{ act({k:'build',c:popCell,t:1}); closePop(); }); $('bFort').addEventListener('click',()=>{ act({k:'build',c:popCell,t:2}); closePop(); }); $('bSam').addEventListener('click',()=>{ act({k:'build',c:popCell,t:3}); closePop(); });
 $('zin').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1.6); clampView(); } }); $('zout').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1/1.6); clampView(); } });
-$('aCity').addEventListener('click',()=>arm(1)); $('aFort').addEventListener('click',()=>arm(2)); $('aSam').addEventListener('click',()=>arm(3));
-// the missile button offers the weapons; picking one arms it, and the next tap on another nation fires it
-$('arms').innerHTML=ARMS.map((a,i)=>'<button data-w="'+i+'" aria-label="'+a.name+'"><b>'+a.ico+'</b><span>'+fmt(a.cost)+'</span></button>').join('');
-$('aNuke').addEventListener('click',()=>{
-  const e=$('arms'), open=!e.classList.contains('hidden'); closePop();
-  if (armed>=4){ arm(armed); return; }
-  if (open) return;
-  e.classList.remove('hidden'); hud(); placeArms();
+// a press on a bar button disarms what it armed; otherwise it opens its tray, or closes it if already open
+for (const [id,list] of [['aBld',BUILDS],['aNuke',WEAPONS]]) $(id).addEventListener('click',()=>{
+  const was=trayOf; closePop();
+  if (list.some(x=>x.t===armed)){ arm(armed); return; }
+  if (was===id) return;
+  trayOf=id; const e=$('tray');
+  e.innerHTML=list.map(x=>'<button data-t="'+x.t+'" aria-label="'+x.name+'"><b>'+x.ico+'</b><span></span></button>').join('');
+  e.classList.remove('hidden'); hud(); placeTray();
 });
-function placeArms(){
-  const e=$('arms'), r=$('aNuke').getBoundingClientRect(), w=e.offsetWidth/2+8;
+function placeTray(){
+  if (!trayOf) return;
+  const e=$('tray'), r=$(trayOf).getBoundingClientRect(), w=e.offsetWidth/2+8;
   e.style.left=within(r.left+r.width/2,w,cw-w-48)+'px'; e.style.top=($($('ask').classList.contains('hidden')?'bar':'ask').getBoundingClientRect().top-8)+'px';      // clear of the zoom buttons and of a request waiting for an answer
 }
-$('arms').addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b || b.disabled) return; closePop(); arm(4+ +b.dataset.w); });
+$('tray').addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b || b.disabled) return; closePop(); arm(+b.dataset.t); });
 $('nAlly').addEventListener('click',()=>{ const o=natWho; if (o>0 && o!==ME && G.players[o].alive) act(allied(ME,o)?{k:'break',q:o}:{k:'req',q:o}); closePop(); });
 $('nBoat').addEventListener('click',()=>{ const o=natWho, c=o>0 && natCell>=0 ? cellOf(o,natCell) : -1; closePop(); if (c>=0) tapCell(c,true); });
 function answer(k){ const a=G.players[ME].asks.find(a=>a.from===askFrom); if (!a) return; answered[a.from]=a.until; act({k,q:a.from}); hud(); }
