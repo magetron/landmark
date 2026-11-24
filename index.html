@@ -71,7 +71,17 @@ button.bld.on,button.bld.on span{color:#111}
 h1{font-size:34px;letter-spacing:.14em;margin:0 0 4px;color:#ffd23f}
 h2{font-size:22px;margin:0 0 8px}
 p{margin:6px 0;color:#b9c6d6}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:12px 0 0}
+.grid button span{font-size:12px;padding:12px 4px 5px}
+#opts{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+#diffN{font-size:12px;margin:2px 0 0;min-height:16px}
+/* the Play button stays at the foot of the screen while the maps scroll under it */
+#foot{position:sticky;bottom:-18px;margin:0 -18px -18px;padding:10px 18px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(#1c202600,#1c2026 30%)}
+#foot .big{margin-top:6px}
+#links{display:flex;gap:8px}#links button{flex:1}
+#back{margin:6px 0 4px}
+#pause .card{max-width:320px}
+#pauseS{margin-bottom:14px}
 .seg{display:flex;flex:1;gap:4px}.seg button{flex:1}
 .big{width:100%;padding:13px;font-weight:700;background:#ffd23f;color:#111;border-color:#ffd23f;margin-top:10px}
 .plain{width:100%;padding:11px;margin-top:8px}
@@ -119,6 +129,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
 
 <div id="menu" class="sheet"><div class="card">
   <h1>LANDMARK</h1>
+  <button class="big hidden" id="back">▶ Back to game</button>
   <input id="nm" placeholder="Your name" maxlength="14" autocomplete="off" aria-label="Your name">
   <div id="entry" class="hidden">
     <button class="big" id="mkRoom">Create lobby</button>
@@ -131,22 +142,34 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
     <div class="row" id="inv"><input id="link" readonly aria-label="Invite link"><button id="copy">Copy invite link</button></div>
     <div id="roomS"></div>
   </div>
-  <button class="big hidden" id="go">Start</button>
   <div id="pick">
+    <div id="opts">
+      <div class="row"><span class="ico">⚔</span><div class="seg" id="diff">
+        <button data-d="easy">Easy</button><button data-d="normal">Normal</button><button data-d="hard">Hard</button>
+      </div></div>
+      <div class="row"><span class="ico">⚑</span><div class="seg" id="nb">
+        <button data-n="3">3</button><button data-n="6">6</button><button data-n="9">9</button><button data-n="12">12</button>
+      </div></div>
+      <p id="diffN"></p>
+    </div>
     <div class="grid" id="maps"></div>
-    <div class="row" style="margin-bottom:8px"><span class="ico">⚑</span><div class="seg" id="nb">
-      <button data-n="3">3</button><button data-n="6">6</button><button data-n="9">9</button><button data-n="12">12</button>
-    </div></div>
-    <div class="row"><span class="ico">⚔</span><div class="seg" id="diff">
-      <button data-d="easy">Easy</button><button data-d="normal">Normal</button><button data-d="hard">Hard</button>
-    </div></div>
   </div>
-  <button class="plain hidden" id="leave">Leave lobby</button>
-  <button class="plain hidden" id="toMp">Multiplayer</button>
-  <div id="lan" class="hidden"></div>
-  <form id="join"><input id="addr" placeholder="landmark-server.patrickwu.uk" inputmode="url" autocomplete="off" autocapitalize="off" aria-label="Server address"><button aria-label="Join server">⇄</button></form>
-  <button class="plain" id="resume" style="display:none">Resume</button>
-  <button class="plain" id="helpBtn">?</button>
+  <div id="foot">
+    <button class="big hidden" id="go">Start</button>
+    <button class="big" id="play">Play</button>
+    <div id="links"><button class="plain hidden" id="toMp">Multiplayer</button><button class="plain hidden" id="online">Play online</button><button class="plain" id="helpBtn">How to play</button><button class="plain hidden" id="leave">Leave lobby</button></div>
+    <form id="join" class="hidden"><input id="addr" placeholder="landmark-server.patrickwu.uk" inputmode="url" autocomplete="off" autocapitalize="off" aria-label="Server address"><button aria-label="Join server">⇄</button></form>
+    <div id="lan" class="hidden"></div>
+  </div>
+</div></div>
+
+<div id="pause" class="sheet hidden"><div class="card">
+  <h2 id="pauseT">Paused</h2>
+  <p id="pauseS"></p>
+  <button class="big" id="pResume">Resume</button>
+  <button class="plain" id="pRestart">Restart</button>
+  <button class="plain" id="pHelp">How to play</button>
+  <button class="plain" id="pMenu">Main menu</button>
 </div></div>
 
 <div id="help" class="sheet hidden"><div class="card">
@@ -158,7 +181,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
   <h2 id="endT"></h2>
   <p id="endS"></p>
   <button class="big" id="again">Again</button>
-  <button class="plain" id="change">Maps</button>
+  <button class="plain" id="change">Main menu</button>
 </div></div>
 
 <script>
@@ -352,6 +375,7 @@ const SPAWN_T = 100, NET_SUB = 4;           // network games: ticks to choose a 
 let G = null, speed = 1, paused = true, armed = 0, ringAt = -1, popCell = -1, natCell = -1, natWho = 0, askFrom = 0, answered = {}, tapX = 0, tapY = 0, pressT = 0, gone = 0;
 const save = (() => { try { return JSON.parse(localStorage.getItem('landmark.v1')) || {}; } catch(e){ return {}; } })();
 save.diff = save.diff || 'easy'; save.wins = save.wins || {}; save.bots = save.bots || 6;
+if (!(save.map>=0 && save.map<MAPS.length)) save.map = 0;
 const persist = () => { try { localStorage.setItem('landmark.v1', JSON.stringify(save)); } catch(e){} };
 function mulberry32(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 
@@ -1418,12 +1442,15 @@ async function start(mi){                     // a game on this device alone
   ME=1;
   let M; try { M=await loadMap(mi); } catch(e){ toast('Map did not load'); return; }
   newGame(M,save.diff,null,null,[myName()]); fit(); paused=true; acc=0; armed=0; closePop();
-  for (const id of ['menu','end','help']) $(id).classList.add('hidden');
-  $('resume').style.display='';
+  for (const id of ['menu','end','help','pause']) $(id).classList.add('hidden');
 }
 // which menu this is: alone, choosing a lobby, or inside one
 const menuMode = () => !NET || NET.solo ? 'solo' : NET.room ? 'room' : 'entry';
+const DIFF_NOTE={easy:'Nations are slow, and mostly leave you be.',normal:'Nations are quicker, and will come for you.',hard:'Nations are fast and strong, and all of them will come for you.'};
+// a match is on that the menu can go back to
+const live = () => !!G && G.phase!=='over' && (!G.mp || (!!NET && NET.ready));
 function buildMenu(){
+  if (!G) $('bar').style.display='none';                  // no match yet: no toolbar behind the menu
   $('maps').innerHTML=MAPS.map((m,i)=>'<button data-m="'+i+'" style="background-image:url(maps/'+m[0]+'/thumbnail.webp)"><span>'+m[1]+(save.wins[m[0]+'/'+save.diff]?' ★':'')+'</span></button>').join('');
   if (document.activeElement!==$('nm')) $('nm').value=save.name||'';
   renderMenu();
@@ -1431,10 +1458,13 @@ function buildMenu(){
 function renderMenu(){
   const mode=menuMode(), r=NET && NET.room, host=!!r && r.host===NET.id, show=(id,on)=>$(id).classList.toggle('hidden',!on);
   show('entry',mode==='entry'); show('room',mode==='room'); show('pick',mode!=='entry');
-  show('go',mode==='room' && host); show('leave',mode==='room'); show('toMp',!!NET && NET.solo); show('join',!NET);
+  show('go',mode==='room' && host); show('leave',mode==='room'); show('toMp',!!NET && NET.solo); show('online',!NET && $('join').classList.contains('hidden'));
+  show('play',mode==='solo'); show('back',live());
   show('lan',!!NET && mode!=='solo' && !!NET.lan);
   $('pick').classList.toggle('ro',mode==='room' && !host);
-  const cfg=mode==='room' ? r.cfg : {map:-1,diff:save.diff,bots:save.bots};
+  const cfg=mode==='room' ? r.cfg : {map:save.map,diff:save.diff,bots:save.bots};
+  $('diffN').textContent=DIFF_NOTE[cfg.diff]||'';
+  if (mode==='solo') $('play').textContent='Play · '+MAPS[save.map][1]+' · '+save.diff[0].toUpperCase()+save.diff.slice(1);
   for (const b of $('maps').children) b.classList.toggle('sel',+b.dataset.m===cfg.map);
   for (const b of $('diff').children) b.classList.toggle('on',b.dataset.d===cfg.diff);
   for (const b of $('nb').children) b.classList.toggle('on',+b.dataset.n===cfg.bots);
@@ -1456,7 +1486,7 @@ function renderMenu(){
 }
 $('maps').addEventListener('click',e=>{
   const b=e.target.closest('button'); if (!b) return;
-  if (menuMode()==='room') NET.post('mp/cfg',{id:NET.id,map:+b.dataset.m}); else start(+b.dataset.m);
+  if (menuMode()==='room') NET.post('mp/cfg',{id:NET.id,map:+b.dataset.m}); else { save.map=+b.dataset.m; persist(); renderMenu(); }
 });
 $('diff').addEventListener('click',e=>{
   const b=e.target.closest('button'); if (!b) return;
@@ -1480,6 +1510,8 @@ $('link').addEventListener('focus',()=>$('link').select());
 $('leave').addEventListener('click',()=>{ NET.post('mp/leave',{id:NET.id}); netDrop(); });
 $('nm').addEventListener('change',()=>{ if (NET && NET.want && NET.id && myName() && !NET.room){ NET.post('mp/join',{id:NET.id,room:NET.want}); NET.want=''; } });
 $('solo').addEventListener('click',()=>{ NET.solo=true; renderMenu(); });
+$('play').addEventListener('click',()=>start(save.map));
+$('online').addEventListener('click',()=>{ $('join').classList.remove('hidden'); renderMenu(); $('addr').focus(); });
 $('toMp').addEventListener('click',()=>{ NET.solo=false; renderMenu(); });
 $('ratio').addEventListener('input',()=>{ $('rv').textContent=$('ratio').value+'%'; });
 $('zin').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1.6); clampView(); } }); $('zout').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1/1.6); clampView(); } });
@@ -1505,7 +1537,24 @@ $('askY').addEventListener('click',()=>answer('yes'));
 $('askN').addEventListener('click',()=>answer('no'));
 $('atk').addEventListener('pointerdown',e=>{ const b=e.target.closest('button'); if (!b) return; act({k:'retreat',a:+b.dataset.a}); hud(); });
 $('speed').addEventListener('click',()=>{ speed=speed===1?2:speed===2?4:1; $('speed').textContent='×'+speed; });
-$('menuBtn').addEventListener('click',()=>{ buildMenu(); paused=true; $('menu').classList.remove('hidden'); });
+// ☰ in a match: the pause menu. Alone the match stops while it is open; over the network it carries on.
+$('menuBtn').addEventListener('click',()=>{
+  if (!G.mp) paused=true; closePop();
+  const s=Math.round(G.tick/10), me=G.players[ME];
+  $('pauseT').textContent=G.mp?'Menu':'Paused';
+  $('pauseS').textContent=G.M.name+' · '+G.diff+' · '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0')+(me.spawned?' · '+(100*me.tiles/G.M.total).toFixed(1)+'% of the land':'');
+  $('pRestart').classList.toggle('hidden',G.mp); sure(0);
+  $('pMenu').textContent=G.mp?'Lobby':'Main menu';
+  $('pause').classList.remove('hidden');
+});
+function resume(){ for (const id of ['pause','menu']) $(id).classList.add('hidden'); paused=!(G && G.phase==='play'); }
+// Restart throws the match away, so it asks for a second press
+let sureT=0;
+function sure(on){ clearTimeout(sureT); $('pRestart').textContent=on?'Tap again to restart':'Restart'; $('pRestart').classList.toggle('on',!!on); if (on) sureT=setTimeout(()=>sure(0),3000); }
+$('pResume').addEventListener('click',resume);
+$('pRestart').addEventListener('click',()=>{ if (!$('pRestart').classList.contains('on')){ sure(1); return; } sure(0); start(G.M.mi); });
+$('pHelp').addEventListener('click',()=>$('help').classList.remove('hidden'));
+$('pMenu').addEventListener('click',()=>{ $('pause').classList.add('hidden'); buildMenu(); $('menu').classList.remove('hidden'); });
 // the server that usually hosts (the laptop, reached through its Cloudflare tunnel); the box starts on it so joining is one
 // press. ?join=address in the link goes straight there. A LAN address (an IP or localhost) is plain http on port 8080;
 // a name like the tunnel's is https on its default port.
@@ -1522,14 +1571,15 @@ $('nm').addEventListener('input',()=>{
   save.name=clean($('nm').value); persist(); $('nm').classList.toggle('need',!save.name);
   if (NET && NET.id) NET.post('mp/name',{id:NET.id,name:myName()});
 });
-$('resume').addEventListener('click',()=>{ $('menu').classList.add('hidden'); paused=!(G && G.phase==='play'); });
+$('back').addEventListener('click',resume);
 $('helpBtn').addEventListener('click',()=>$('help').classList.remove('hidden')); $('helpOk').addEventListener('click',()=>$('help').classList.add('hidden'));
 $('again').addEventListener('click',()=>start(G.M.mi)); $('change').addEventListener('click',()=>{ $('end').classList.add('hidden'); buildMenu(); $('menu').classList.remove('hidden'); });
 $('flav').innerHTML=[
   ['Tap land','Send troops there. Across water they go by boat.'],
   ['Slider','Share of your troops each tap sends.'],
   ['Hold on a nation','Ally, break an alliance, or force a boat.'],
-  ['▣ ◆','City or post: press when lit, then tap your land.'],
+  ['🏗️','City, defence post or air defence: pick one, then tap your land.'],
+  ['🚀','Missile or nuke: pick one, then tap another nation.'],
   ['→ ✕','Tap one of your attacks to call it off.'],
   ['Win','Be the last nation standing.'],
 ].map(([a,b])=>'<dt>'+a+'</dt><dd>'+b+'</dd>').join('');
@@ -1578,13 +1628,13 @@ async function netStart(m){
   ME=seat;
   newGame(M,m.diff,m.seed,m.bots,m.players.map((q,i)=>clean(q.name)||'Player '+(i+1)));
   G.mp=true; G.phase='play'; fit(); acc=0; armed=0; closePop();
-  for (const id of ['menu','end','help']) $(id).classList.add('hidden');
-  $('resume').style.display=''; NET.cur=null; NET.acc=0; NET.sums={}; NET.ready=true;
+  for (const id of ['menu','end','help','pause']) $(id).classList.add('hidden');
+  NET.cur=null; NET.acc=0; NET.sums={}; NET.ready=true;
 }
 // out of a network match (it was stopped, or I left the lobby): freeze it and show the menu
 function netDrop(){
   NET.run++; NET.ready=false; NET.q=[]; NET.cur=null;
-  if (G && G.mp){ G.phase='over'; $('end').classList.add('hidden'); $('resume').style.display='none'; buildMenu(); $('menu').classList.remove('hidden'); }
+  if (G && G.mp){ G.phase='over'; for (const id of ['end','pause']) $(id).classList.add('hidden'); buildMenu(); $('menu').classList.remove('hidden'); }
 }
 // the line to the server; reopened whenever it goes quiet, and the server then sends whatever was missed
 function netOpen(){
