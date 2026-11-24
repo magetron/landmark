@@ -61,6 +61,8 @@ button.bld.on,button.bld.on span{color:#111}
 #pop button b,#arms button b{font-size:20px;line-height:1}
 #pop button span,#arms button span{font-size:12px;color:#ffd23f;font-weight:700}
 #pop button:disabled,#arms button:disabled{opacity:.45}
+/* a margin round each popup that catches a finger which just misses a button, so it does not land on the map */
+#pop::after,#nat::after,#arms::after,#ask::after{content:'';position:absolute;inset:-14px -14px -8px;z-index:-1}
 .ico{width:26px;text-align:center;font-size:16px;color:#b9c6d6}
 .grid button{position:relative;aspect-ratio:16/10;padding:0;overflow:hidden;background:#2a313b center/cover no-repeat;border-color:#fff3}
 .grid button span{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 6px;background:linear-gradient(#0000,#000c);font-weight:700;font-size:13px;text-shadow:0 1px 2px #000}
@@ -318,9 +320,12 @@ const FL = {
 // Results swing sharply with these numbers. On Normal nations also refuse runaway leaders, court the strong, and
 // will betray you. Hard's cap was 1 (OpenFront's). Normal's numbers sit about halfway between Easy's and Hard's:
 // in scripted matches on Europe (9 nations, every flavour, 12 seeds) the scripted player won 100% on Easy,
-// about 70% on Normal (92% with Normal's old numbers, which were close to Easy's) and about 40% on Hard.
-const DIFF = {easy:{cap:.57,grow:.87,start:14000,think:[40,64],bias:.3}, normal:{cap:.7,grow:.94,start:20000,think:[24,39],bias:.69}, hard:{cap:.8,grow:1,start:25000,think:[12,20],bias:1}};
-const GRACE={easy:700,normal:325,hard:50};
+// about 70% on Normal (92% with Normal's old numbers, which were close to Easy's) and about 55% on Hard.
+// Hard was softened for play on a phone (cap .8, grow 1, start 25000, think [12,20], grace 50: about 40% on Europe,
+// 18% on Britain, now 27%). Its nations also act less often and wait 20 seconds; a scripted player does not need the
+// time to react, so that part does not show in these numbers, but a person working a slider does.
+const DIFF = {easy:{cap:.57,grow:.87,start:14000,think:[40,64],bias:.3}, normal:{cap:.7,grow:.94,start:20000,think:[24,39],bias:.69}, hard:{cap:.75,grow:.97,start:22000,think:[18,30],bias:1}};
+const GRACE={easy:700,normal:325,hard:200};
 const GOLD=300, GOLD_LAND=2500;                 // gold a tick: a base, plus more the larger your share of the land
 const ALLY_T=3000, REQ_COOL=300, ASK_T=200, TRAITOR_T=300, RETREAT=.75;
 const COLS = ['#000000','#ffd23f','#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#9a6324','#008080','#bfef45','#fabed4','#800000','#aaffc3','#dcbeff','#808000'];
@@ -353,7 +358,7 @@ const fmt = n => n<1000 ? String(Math.round(n)) : n<1e6 ? (n/1000).toFixed(n<100
 /* ---------- game state ---------- */
 let ME = 1, NET = null;                      // my player id; the connection when playing over the network
 const SPAWN_T = 100, NET_SUB = 4;           // network games: ticks to choose a start, and sub-steps per tick
-let G = null, speed = 1, paused = true, armed = 0, ringAt = -1, popCell = -1, natCell = -1, natWho = 0, askFrom = 0, answered = {}, tapX = 0, tapY = 0, pressT = 0;
+let G = null, speed = 1, paused = true, armed = 0, ringAt = -1, popCell = -1, natCell = -1, natWho = 0, askFrom = 0, answered = {}, tapX = 0, tapY = 0, pressT = 0, gone = 0;
 const save = (() => { try { return JSON.parse(localStorage.getItem('landmark.v1')) || {}; } catch(e){ return {}; } })();
 save.diff = save.diff || 'easy'; save.wins = save.wins || {}; save.bots = save.bots || 6;
 const persist = () => { try { localStorage.setItem('landmark.v1', JSON.stringify(save)); } catch(e){} };
@@ -1248,6 +1253,7 @@ function hud(){
   const inc=g.attacks.filter(a=>a.to===ME).map(a=>'<b>← '+g.players[a.from].name+' '+fmt(a.troops)+'</b>');
   $('atk').innerHTML=inc.concat(out).join(' ');
   const ask=me.alive && me.asks.find(a=>answered[a.from]!==a.until); askFrom=ask?ask.from:0;      // one I have answered stays off the bar
+  if (!ask && !$('ask').classList.contains('hidden')) gone=performance.now();
   $('ask').classList.toggle('hidden',!ask); if (ask) $('ask').firstElementChild.textContent='🤝 '+g.players[ask.from].name;
   if (natWho) natState();
 }
@@ -1290,8 +1296,10 @@ const pts=new Map(); let moved=false, sx=0, sy=0, swallow=false;
 // With a weapon armed, a press on the map aims it: the blast circle sits under the finger and follows it, the map
 // does not pan, and lifting fires there. `sight` is where the pointer is; a mouse shows the circle as it hovers.
 let sight=null, aiming=false;
+// `gone`: when a popup or the alliance prompt last went away by itself (the request ran out, the nation fell, the
+// phone turned). A press on the map in the next moment was meant for it, and only closes things.
 cv.addEventListener('pointerdown',e=>{
-  swallow=popCell>=0 || !$('arms').classList.contains('hidden'); closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
+  swallow=popCell>=0 || !$('arms').classList.contains('hidden') || performance.now()-gone<600; closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
   pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); clearTimeout(pressT);
   if (pts.size===1){
     moved=false; sx=e.clientX; sy=e.clientY; aiming=armed>=4 && !swallow;
@@ -1354,7 +1362,10 @@ function dbgShow(){
 if (DBG) addEventListener('pointerdown',e=>{ const t=e.target.closest && e.target.closest('[id]'); dbgTouch=(t?t.id:'?')+' '+Math.round(e.clientX)+','+Math.round(e.clientY)+' '+e.pointerType; },true);
 function refit(){
   if (cv.clientWidth===cw && cv.clientHeight===ch && Math.min(window.devicePixelRatio||1,2)===dpr) return;
-  closePop();
+  // the phone's own toolbars coming and going change only the height: popups stay open for that, the weapon tray
+  // moves with the bar. A turn of the phone closes them.
+  if (cv.clientWidth!==cw){ if (popCell>=0 || !$('arms').classList.contains('hidden')) gone=performance.now(); closePop(); }
+  else if (!$('arms').classList.contains('hidden')) requestAnimationFrame(placeArms);
   if (!G){ fit(); return; }
   const far=V.s<=V.min*1.02, mx=(cw/2-V.x)/V.s, my=(ch/2-V.y)/V.s, s=V.s;
   fit();
@@ -1385,7 +1396,7 @@ function openNat(c){
 }
 // the card belongs to the nation it was opened on, wherever the borders have moved since
 function natState(){
-  const o=natWho, Q=G.players[o]; if (!Q.alive){ closePop(); return; }
+  const o=natWho, Q=G.players[o]; if (!Q.alive){ closePop(); gone=performance.now(); return; }
   $('natH').innerHTML='<i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+COLS[o]+'"></i> <b>'+Q.name+'</b><br>'+fmt(Q.troops)+' · ● '+fmt(Q.gold)+(Q.traitor>G.tick?' · 💔':'');
   const al=allied(ME,o), asked=G.players[ME].asks.some(a=>a.from===o);
   $('nAlly').textContent=al?'💔':'🤝'; $('nAlly').disabled=!al && !asked && G.cool[ME*G.n1+o]>G.tick; $('nBoat').disabled=al;
@@ -1489,10 +1500,12 @@ $('aNuke').addEventListener('click',()=>{
   const e=$('arms'), open=!e.classList.contains('hidden'); closePop();
   if (armed>=4){ arm(armed); return; }
   if (open) return;
-  e.classList.remove('hidden'); hud();
-  const r=$('aNuke').getBoundingClientRect(), w=e.offsetWidth/2+8;
-  e.style.left=within(r.left+r.width/2,w,cw-w-48)+'px'; e.style.top=($($('ask').classList.contains('hidden')?'bar':'ask').getBoundingClientRect().top-8)+'px';      // clear of the zoom buttons and of a request waiting for an answer
+  e.classList.remove('hidden'); hud(); placeArms();
 });
+function placeArms(){
+  const e=$('arms'), r=$('aNuke').getBoundingClientRect(), w=e.offsetWidth/2+8;
+  e.style.left=within(r.left+r.width/2,w,cw-w-48)+'px'; e.style.top=($($('ask').classList.contains('hidden')?'bar':'ask').getBoundingClientRect().top-8)+'px';      // clear of the zoom buttons and of a request waiting for an answer
+}
 $('arms').addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b || b.disabled) return; closePop(); arm(4+ +b.dataset.w); });
 $('nAlly').addEventListener('click',()=>{ const o=natWho; if (o>0 && o!==ME && G.players[o].alive) act(allied(ME,o)?{k:'break',q:o}:{k:'req',q:o}); closePop(); });
 $('nBoat').addEventListener('click',()=>{ const o=natWho, c=o>0 && natCell>=0 ? cellOf(o,natCell) : -1; closePop(); if (c>=0) tapCell(c,true); });
