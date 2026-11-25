@@ -81,6 +81,12 @@ p{margin:6px 0;color:#b9c6d6}
 #links{display:flex;gap:8px}#links button{flex:1}
 #back{margin:6px 0 4px}
 #pause .card{max-width:320px}
+#stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:12px 0 4px}
+#stats div{background:#2a313b;border-radius:10px;padding:8px 4px}
+#stats b{display:block;font-size:18px;color:#fff}
+#stats span{font-size:11px;color:#b9c6d6}
+#chart{position:static;inset:auto;touch-action:auto;width:100%;height:110px;display:block;margin-top:6px;background:#2a313b;border-radius:10px}
+#chartL{font-size:11px;margin:4px 0 0}
 #pauseS{margin-bottom:14px}
 .seg{display:flex;flex:1;gap:4px}.seg button{flex:1}
 .big{width:100%;padding:13px;font-weight:700;background:#ffd23f;color:#111;border-color:#ffd23f;margin-top:10px}
@@ -180,6 +186,9 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
 <div id="end" class="sheet hidden"><div class="card">
   <h2 id="endT"></h2>
   <p id="endS"></p>
+  <div id="stats"></div>
+  <canvas id="chart"></canvas>
+  <p id="chartL">Share of the land over the match</p>
   <button class="big" id="again">Again</button>
   <button class="plain" id="change">Main menu</button>
 </div></div>
@@ -360,7 +369,8 @@ const fallMod = () => 5-2*G.falls/G.M.total;
 const SAM_COST=300000, SAM_MAX=900000, SAM_R=40, SAM_T=100;
 // Port (building 4, on the coast): it trades with the ports of other nations at peace with it, PORT_GOLD a tick
 // for each, an ally's counting twice, up to PORT_MAX for each port. A nation with a port sails PORT_V times as fast.
-const PORT_COST=100000, PORT_GOLD=30, PORT_MAX=8, PORT_V=1.5;
+// At 30 a port in scripted matches cut the Normal win rate on Europe from 67% to 59%; at 20 it is 62%, Hard unchanged.
+const PORT_COST=100000, PORT_GOLD=20, PORT_MAX=8, PORT_V=1.5;
 const portCost = P => Math.min(1e6, Math.round(PORT_COST*pw(1.5,P.ports)/1000)*1000);
 const coastal = c => { const M=G.M; for (let k=0;k<4;k++){ const d=nbr(M,c,k); if (d>=0 && M.water[d]) return true; } return false; };
 const samCost = P => Math.min(SAM_MAX, SAM_COST*(P.sams+1)), samR = () => Math.round(SAM_R*Math.sqrt(G.M.k));
@@ -391,11 +401,11 @@ function newGame(M, diff, seed, nbots, humans){
   const keys = Object.keys(FL), nat = M.nations.slice();
   for (let i=keys.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [keys[i],keys[j]]=[keys[j],keys[i]]; }
   for (let i=nat.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [nat[i],nat[j]]=[nat[j],nat[i]]; }
-  const mk = (id,name,x) => Object.assign({id,name,tiles:0,troops:0,gold:0,alive:false,lastHit:0,cities:0,forts:[],sams:0,ports:0,trade:0,traitor:0,asks:[],spawned:false},x);
+  const mk = (id,name,x) => Object.assign({id,name,tiles:0,troops:0,gold:0,alive:false,lastHit:0,cities:0,forts:[],sams:0,ports:0,trade:0,st:{peak:0,kills:0,built:0,boats:0,fired:0,gold:0,place:0},traitor:0,asks:[],spawned:false},x);
   const players = [mk(0,'',{tiles:M.total})];
   humans.forEach((nm,i)=>players.push(mk(i+1,nm,{human:true})));
   const H = humans.length;
-  G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],missiles:[],fall:new Uint8Array(M.N),falls:0,fmarks:[],rdy:new Int32Array(M.N),tick:0,aid:0,phase:'spawn',
+  G = {M,rnd,players,diff,dm,owner:new Uint8Array(M.N),bld:new Uint8Array(M.N),blds:[],attacks:[],boats:[],missiles:[],fall:new Uint8Array(M.N),falls:0,hist:[],fmarks:[],rdy:new Int32Array(M.N),tick:0,aid:0,phase:'spawn',
        stamp:new Int32Array(M.N),mark:new Uint8Array(M.N),par:new Int32Array(M.N),q:new Int32Array(M.N),seen:new Int32Array(M.N),gen:0,plan:null,
        dirty:[],dflag:new Uint8Array(M.N),redraw:true,grace:0,fx:[],mp:false};
   answered = {};
@@ -578,6 +588,7 @@ function request(p,q){
 function retreat(a){ if (a.dead) return; a.dead=true; const A=G.players[a.from]; if (A.alive) A.troops+=a.troops*RETREAT; a.troops=0; }
 function eliminate(D,by){
   D.alive=false; D.troops=0;
+  D.st.place=G.players.filter(P=>P.alive).length+1; if (by && by!==D && by.st) by.st.kills++;
   for (const a of G.attacks) if (a.from===D.id) a.dead=true;
   for (const b of G.boats) if (b.p===D.id) b.dead=true;
   if (!D.human) toast(D.name+' ✕');
@@ -679,7 +690,7 @@ function routeTo(p, L){
   return null;
 }
 const boatsOf = p => G.boats.reduce((n,b)=>n+(!b.dead && b.p===p),0);
-function sail(P,path,amt){ P.troops-=amt; G.boats.push({p:P.id,path,i:0,troops:amt,v:P.ports?PORT_V:1}); }
+function sail(P,path,amt){ P.troops-=amt; P.st.boats++; G.boats.push({p:P.id,path,i:0,troops:amt,v:P.ports?PORT_V:1}); }
 function landBoat(b){
   const g=G, P=g.players[b.p], c=b.path[b.path.length-1], o=g.owner[c];
   if (!P.alive) return;
@@ -695,7 +706,7 @@ function landBoat(b){
 function build(p,c,type){
   const g=G, P=g.players[p], cost=type===1?cityCost(P):type===2?fortCost(P):type===3?samCost(P):portCost(P);
   if (g.owner[c]!==p || g.bld[c] || P.gold<cost || (type===4 && !coastal(c))) return false;
-  P.gold-=cost; g.bld[c]=type; g.blds.push(c);
+  P.gold-=cost; g.bld[c]=type; g.blds.push(c); P.st.built++;
   if (type===1) P.cities++; else if (type===2) P.forts.push(c); else if (type===3){ P.sams++; g.rdy[c]=0; } else P.ports++;       // rdy: the tick an air defence is loaded again
   return true;
 }
@@ -714,7 +725,7 @@ function firesFrom(p,c){
 function launch(p,c,w){
   const g=G, {M,owner}=g, P=g.players[p], o=owner[c], A=ARMS[w];
   if (!M.land[c] || o===0 || o===p || allied(p,o) || P.gold<A.cost) return;
-  P.gold-=A.cost;
+  P.gold-=A.cost; P.st.fired++;
   const [x,y]=firesFrom(p,c), dx=c%M.W+.5-x, dy=((c/M.W)|0)+.5-y;
   g.missiles.push({p,w,x,y,c,t0:g.tick,at:g.tick+Math.max(8,Math.ceil(Math.sqrt(dx*dx+dy*dy)/(MISSILE_V*M.sc))),r:Math.round(A.r*Math.sqrt(M.k))});
   if (o===ME) toast(A.ico+' '+P.name);
@@ -885,8 +896,12 @@ function think(P){
       }
     }
   }
-  else if (P.cities && P.ports<(fl.sailor?3:1+(P.cities>>1)) && P.gold>=portCost(P) && portCost(P)<=cityCost(P)){ const c=pickCell(p,c=>coastal(c)); if (c>=0) build(p,c,4); }
-  else if (P.gold>=cityCost(P)){ const c=pickCell(p,c=>ownNb(c,p)===4); if (c>=0 && build(p,c,1) && arms) P.want=nextWant(P); }
+  else {
+    // now and then a port in place of a city; a nation with no coast to hand builds the city
+    const port=P.cities && P.ports<(fl.sailor?3:1+(P.cities>>1)) && P.gold>=portCost(P) && portCost(P)<=cityCost(P) ? pickCell(p,coastal) : -1;
+    if (port>=0) build(p,port,4);
+    else if (P.gold>=cityCost(P)){ const c=pickCell(p,c=>ownNb(c,p)===4); if (c>=0 && build(p,c,1) && arms) P.want=nextWant(P); }
+  }
   if (fl.builder && P.forts.length<5 && P.gold>=fortCost(P)+cityCost(P) && nb.length){ const Q=nb[(g.rnd()*nb.length)|0], c=pickCell(p,c=>touches(c,Q.id)); if (c>=0) build(p,c,2); }
   if (mine.length>=(fl.multi||2)) return;
   if (neutral){
@@ -929,6 +944,12 @@ function advance(f){
   for (let i=0;i<g.attacks.length;i++) if (!g.attacks[i].dead) runAttack(g.attacks[i],f);
   for (let i=0;i<g.boats.length;i++){ const b=g.boats[i]; if (b.dead) continue; b.i+=.5*g.M.sc*f*(b.v||1); if (b.i>=b.path.length-1){ b.dead=true; landBoat(b); } }
 }
+// every five seconds: each nation's share of the land, for the chart at the end, and its best share yet
+function record(){
+  const g=G, h=new Float32Array(g.n1);
+  for (const P of g.players) if (P.id){ h[P.id]=P.tiles/g.M.total; if (h[P.id]>P.st.peak) P.st.peak=h[P.id]; }
+  g.hist.push(h);
+}
 // two nations trade while neither is attacking the other
 function trade(){
   const g=G, n1=g.n1, war=new Uint8Array(n1*n1);
@@ -952,11 +973,12 @@ function tick(){
   }
   if (g.tick%8===1) scan();
   if (g.tick%10===0) trade();
+  if (g.tick%50===0) record();
   for (const P of g.players) if (P.alive){
     const cap=capOf(P), m=P.human?1:g.dm.grow;
     if (P.troops<cap) P.troops=Math.min(cap,P.troops+(10+pw(P.troops,.73)/4)*(1-P.troops/cap)*m);
     else P.troops-=(P.troops-cap)*.02;
-    P.gold+=GOLD+GOLD_LAND*P.tiles/g.M.total+P.trade;
+    const inc=GOLD+GOLD_LAND*P.tiles/g.M.total+P.trade; P.gold+=inc; P.st.gold+=inc;
   }
   for (const P of g.players) if (P.alive && P.fl && g.tick>=P.next){
     think(P); const [a,b]=g.dm.think; P.next=g.tick+a+((g.rnd()*(b-a))|0);
@@ -1002,12 +1024,33 @@ function finish(won){
   if (won && !g.mp){ const k=g.M.id+'/'+g.diff; save.wins[k]=(save.wins[k]||0)+1; persist(); }
   endCard(won);
 }
+// each nation's share of the land over time: yours thick and on top
+function chart(){
+  const g=G, cv=$('chart'), d=devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight, H=g.hist; if (!w || H.length<2) return;
+  cv.width=w*d; cv.height=h*d; const c=cv.getContext('2d'); c.scale(d,d);
+  let top=.05; for (const r of H) for (let i=1;i<r.length;i++) top=Math.max(top,r[i]);
+  const X=i=>6+(w-12)*i/(H.length-1), Y=v=>h-6-(h-12)*v/top;
+  c.strokeStyle='#ffffff14'; c.lineWidth=1; c.beginPath(); for (const v of [.25,.5,.75]){ c.moveTo(0,Y(top*v)); c.lineTo(w,Y(top*v)); } c.stroke();
+  const ids=g.players.filter(P=>P.spawned && P.id!==ME).map(P=>P.id).concat([ME]);
+  c.lineJoin='round';
+  for (const id of ids){
+    c.beginPath(); H.forEach((r,i)=>i?c.lineTo(X(i),Y(r[id])):c.moveTo(X(i),Y(r[id])));
+    if (id===ME){ c.strokeStyle='#000a'; c.lineWidth=5; c.stroke(); }
+    c.strokeStyle=COLS[id]; c.globalAlpha=id===ME?1:.7; c.lineWidth=id===ME?3:1.5; c.stroke(); c.globalAlpha=1;
+  }
+}
 function endCard(won){
   const g=G, s=Math.round(g.tick/10);
   $('again').style.display=g.mp?'none':'';
   $('endT').textContent=won?'Victory':'Defeat';
   $('endS').textContent=g.M.name+' · '+g.diff+' · '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
-  setTimeout(()=>$('end').classList.remove('hidden'),700);
+  record();
+  const me=g.players[ME], st=me.st, n=g.players.filter(P=>P.spawned).length, place=won?1:st.place||g.players.filter(P=>P.alive).length;
+  const nth=k=>k+(k%10===1&&k%100!==11?'st':k%10===2&&k%100!==12?'nd':k%10===3&&k%100!==13?'rd':'th');
+  $('stats').innerHTML=[[nth(place)+' of '+n,'Place'],[st.peak&&st.peak<.001?'<0.1%':(100*st.peak).toFixed(1)+'%','Most land'],[st.kills,'Knocked out'],
+    [fmt(st.gold),'Gold earned'],[st.built,'Built'],['⛵'+st.boats+' 🚀'+st.fired,'Sent']].map(([v,l])=>'<div><b>'+v+'</b><span>'+l+'</span></div>').join('');
+  for (const id of ['chart','chartL']) $(id).style.display=g.hist.length<2?'none':'';
+  setTimeout(()=>{ $('end').classList.remove('hidden'); chart(); },700);
 }
 
 /* ---------- actions ---------- */
@@ -1150,7 +1193,7 @@ function fit(){
   cv.width=Math.round(cw*dpr); cv.height=Math.round(ch*dpr);
   if (!G) return;
   const {W,H}=G.M, top=40, bot=barRoom();
-  V.min=Math.min(cw/W,(ch-top-bot)/H); V.s=V.min; V.x=(cw-W*V.s)/2; V.y=top+((ch-top-bot)-H*V.s)/2;
+  V.min=Math.max(.01,Math.min(cw/W,(ch-top-bot)/H)); V.s=V.min;      // above 0 even while a resize leaves no room V.x=(cw-W*V.s)/2; V.y=top+((ch-top-bot)-H*V.s)/2;
 }
 const maxZoom = () => Math.max(V.min*4,14);
 function clampView(){
@@ -1636,7 +1679,7 @@ function slice(){
   advance(1/NET_SUB);
   if (++n.sub===NET_SUB){
     tick(); n.cur=null;
-    if (G.tick%100===0){ let h=G.tick; for (const P of G.players) h=(Math.imul(h,31)+P.tiles*7+Math.floor(P.troops))|0; h=(Math.imul(h,31)+G.falls)|0; n.sums[G.tick]=h; n.post('mp/act',{id:n.id,it:{k:'hash',n:G.tick,h}}); }
+    if (G.tick%100===0){ let h=G.tick; for (const P of G.players) h=(Math.imul(h,31)+P.tiles*7+Math.floor(P.troops)+Math.floor(P.gold))|0; h=(Math.imul(h,31)+G.falls)|0; n.sums[G.tick]=h; n.post('mp/act',{id:n.id,it:{k:'hash',n:G.tick,h}}); }
   }
   return true;
 }
