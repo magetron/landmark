@@ -24,7 +24,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:b
 #bar{position:fixed;left:0;right:0;bottom:0;padding:6px 10px calc(8px + env(safe-area-inset-bottom));
   background:#14181ee8;border-top:1px solid #0006}
 #bar .in{max-width:560px;margin:0 auto}
-#atk{height:22px;font-size:12px;color:#b6c2cf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#atk{height:28px;font-size:12px;color:#b6c2cf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #atk b{color:#ff8a8a;font-weight:600}
 #res{margin:3px 0 6px;gap:8px}
 #meter{position:relative;flex:1;height:20px;background:#0006;border-radius:10px;overflow:hidden}
@@ -37,7 +37,8 @@ button{font:inherit;color:inherit;background:#2a313b;border:1px solid #fff2;bord
   padding:9px 0;min-width:42px;cursor:pointer}
 button:active{background:#3a4452}
 button.on{background:#ffd23f;color:#111;border-color:#ffd23f;font-weight:700}
-#ratio{flex:1;min-width:60px;accent-color:#ffd23f;height:28px}
+#rbox{flex:1;min-width:60px;margin-right:8px;padding:6px 0;touch-action:none;cursor:ew-resize}
+#ratio{display:block;width:100%;margin:0;accent-color:#ffd23f;height:28px;pointer-events:none}
 #rv{width:40px;font-weight:700;font-size:13px}
 #menuBtn{min-width:44px;padding:11px 0}
 #zoom #speed{font-size:14px;font-weight:700}
@@ -52,13 +53,13 @@ button.bld.on,button.bld.on span{color:#111}
 #ask button{min-width:44px;padding:8px 0}#askY{background:#3f8f5a}
 #nat{position:fixed;transform:translate(-50%,-112%);z-index:5;background:#14181ef2;border:1px solid #fff4;border-radius:14px;padding:8px;box-shadow:0 4px 14px #0008;min-width:150px}
 #natH{font-size:12px;margin:0 2px 6px;white-space:nowrap}#natH b{font-size:14px}
-#nat button{flex:1;font-size:18px;padding:8px 0}
-#atk button{font-size:12px;padding:1px 8px;min-width:0;border-radius:9px;margin-right:4px;background:#2a313b}
-#tray{position:fixed;display:flex;gap:8px;transform:translate(-50%,-100%);z-index:5}
-#tray button{width:74px;padding:8px 0 6px;border-radius:14px;background:#14181ef2;border:1px solid #fff4;box-shadow:0 4px 14px #0008;display:flex;flex-direction:column;align-items:center;gap:1px}
+#nat button{flex:1;font-size:18px;padding:8px 0}#nat button.off{opacity:.45}
+#atk button{font-size:12px;padding:4px 10px;min-width:0;border-radius:9px;margin-right:4px;background:#2a313b}
+#tray{position:fixed;display:flex;gap:6px;transform:translate(-50%,-100%);z-index:5}
+#tray button{width:64px;padding:8px 0 6px;border-radius:14px;background:#14181ef2;border:1px solid #fff4;box-shadow:0 4px 14px #0008;display:flex;flex-direction:column;align-items:center;gap:1px}
 #tray button b{font-size:20px;line-height:1}
 #tray button span{font-size:12px;color:#ffd23f;font-weight:700}
-#tray button:disabled{opacity:.45}
+#tray button.off{opacity:.45}
 /* a margin round each popup that catches a finger which just misses a button, so it does not land on the map */
 #nat::after,#tray::after,#ask::after{content:'';position:absolute;inset:-14px -14px -8px;z-index:-1}
 .ico{width:26px;text-align:center;font-size:16px;color:#b9c6d6}
@@ -119,7 +120,7 @@ dl{text-align:left;margin:10px 0}dt{font-weight:700;margin-top:8px}dd{margin:0;c
   <div id="atk"></div>
   <div class="row" id="res"><div id="meter"><div id="fill"></div><div id="mtxt"><span id="tr"></span></div></div><div id="gd"></div></div>
   <div class="row">
-    <span id="rv">20%</span><input id="ratio" type="range" min="5" max="100" step="5" value="20" aria-label="Attack ratio">
+    <span id="rv">20%</span><div id="rbox"><input id="ratio" type="range" min="5" max="100" step="5" value="20" aria-label="Attack ratio" tabindex="-1"></div>
     <button id="aBld" class="bld" aria-label="Build"><i>🏗️</i> <span></span></button>
     <button id="aNuke" class="bld" aria-label="Missiles"><i>🚀</i> <span></span></button>
     <button id="menuBtn" aria-label="Menu">☰</button>
@@ -1125,12 +1126,12 @@ function samNear(x,y){
   for (const b of g.blds) if (g.bld[b]===3 && g.owner[b]===ME){ const dx=V.x+(b%W+.5)*V.s-x, dy=V.y+(((b/W)|0)+.5)*V.s-y, d=dx*dx+dy*dy; if (d<bd){ bd=d; best=b; } }
   return best;
 }
-// my free coast nearest to c, within about a finger of it
-function coastNear(c){
+// my free land nearest to c, within about a finger of it (on the coast, for a port)
+function spotNear(c,port){
   const g=G, M=g.M, W=M.W, x0=c%W, y0=(c/W)|0, R=Math.max(1,Math.ceil(22/V.s)); let best=-1, bd=1e9;
   for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++){
     const X=x0+dx, Y=y0+dy, d2=dx*dx+dy*dy; if (X<0||Y<0||X>=W||Y>=M.H || d2>R*R || d2>=bd) continue;
-    const e=Y*W+X; if (M.land[e] && g.owner[e]===ME && !g.bld[e] && coastal(e)){ bd=d2; best=e; }
+    const e=Y*W+X; if (M.land[e] && g.owner[e]===ME && !g.bld[e] && (!port || coastal(e))){ bd=d2; best=e; }
   }
   return best;
 }
@@ -1138,8 +1139,17 @@ function tapCell(c,byBoat){
   const g=G, me=g.players[ME], o=g.owner[c];
   if (!me.spawned){ if (o===0) act({k:'spawn',c}); return; }
   if (g.phase!=='play' || !me.alive) return;
-  if (armed===4){ const d=coastNear(c); if (d<0){ toast('⚓ Tap your coast'); return; } act({k:'build',c:d,t:4}); arm(0); return; }
-  if (armed){ if (armed>=WPN){ if (o>0 && o!==ME && !allied(ME,o)) act({k:'nuke',c,w:armed-WPN}); } else if (o===ME) act({k:'build',c,t:armed}); arm(0); return; }
+  // something picked from a tray goes on the nearest spot that takes it; a tap where nothing fits says so and keeps it picked
+  if (armed && armed<WPN){
+    const d=spotNear(c,armed===4), b=BUILDS.find(x=>x.t===armed);
+    if (d<0){ toast(b.ico+(armed===4?' Tap your coast':' Tap your own land')); return; }
+    act({k:'build',c:d,t:armed}); arm(0); return;
+  }
+  if (armed){
+    if (o>0 && o!==ME && !allied(ME,o)){ act({k:'nuke',c,w:armed-WPN}); arm(0); }
+    else toast(ARMS[armed-WPN].ico+' Aim at another nation');
+    return;
+  }
   // while there is unclaimed land next to you a tap on your own land pushes into it; otherwise it does nothing.
   // Building is only through the 🏗️ bar button.
   if (!byBoat){ const s=samNear(tapX,tapY); if (s>=0){ ringAt=s; return; } }          // a tap on your air defence shows how far it reaches
@@ -1322,6 +1332,7 @@ function draw(){
     ctx.font='600 '+fs*.85+'px system-ui,sans-serif'; const t=fmt(P.troops); ctx.strokeText(t,x,y+fs*.5); ctx.fillText(t,x,y+fs*.5);
   }
 }
+let askKey='', askAt=0;                        // the request on show, and when it came up
 function hud(){
   const g=G, me=g.players[ME], cap=capOf(me), wait=!me.spawned;
   const rank=g.players.slice(1).filter(P=>P.alive||P.human).sort((a,b)=>b.tiles-a.tiles);
@@ -1331,7 +1342,7 @@ function hud(){
   $('fill').style.width=Math.min(100,100*me.troops/cap)+'%';
   $('tr').textContent=wait?'':fmt(me.troops)+' / '+fmt(cap);
   $('gd').innerHTML=wait?'':'● '+fmt(me.gold)+'<i>+'+fmt((GOLD+GOLD_LAND*me.tiles/g.M.total)*10)+'/s</i>';
-  for (const b of $('tray').children){ const c=priceOf(+b.dataset.t,me); b.lastElementChild.textContent=fmt(c); b.disabled=me.gold<c; }
+  for (const b of $('tray').children){ const c=priceOf(+b.dataset.t,me); b.lastElementChild.textContent=fmt(c); b.classList.toggle('off',me.gold<c); }
   // each bar button shows what is armed from its tray, or else the cheapest thing in it, and fills as gold comes in
   for (const [id,list] of [['aBld',BUILDS],['aNuke',WEAPONS]]){
     const b=$(id), on=list.find(x=>x.t===armed), cost=on?priceOf(on.t,me):Math.min(...list.map(x=>priceOf(x.t,me))), k=Math.min(1,me.gold/cost);
@@ -1343,9 +1354,10 @@ function hud(){
   const out=g.attacks.filter(a=>a.from===ME && !a.dead).map(a=>'<button data-a="'+a.id+'">→ '+(g.players[a.to].name||'land')+' '+fmt(a.troops)+' ✕</button>');
   const sea=boatsOf(ME); if (sea) out.push('⛵ '+sea);
   const inc=g.attacks.filter(a=>a.to===ME).map(a=>'<b>← '+g.players[a.from].name+' '+fmt(a.troops)+'</b>');
-  $('atk').innerHTML=inc.concat(out).join(' ');
+  const ah=inc.concat(out).join(' '); if (ah!==$('atk').dataset.h){ $('atk').dataset.h=ah; $('atk').innerHTML=ah; }
   const ask=me.alive && me.asks.find(a=>answered[a.from]!==a.until); askFrom=ask?ask.from:0;      // one I have answered stays off the bar
   if (!ask && !$('ask').classList.contains('hidden')) gone=performance.now();
+  const ak=ask?ask.from+'/'+ask.until:''; if (ak!==askKey){ askKey=ak; askAt=performance.now(); }
   $('ask').classList.toggle('hidden',!ask); if (ask) $('ask').firstElementChild.textContent='🤝 '+g.players[ask.from].name;
   if (natWho) natState();
 }
@@ -1390,13 +1402,24 @@ const pts=new Map(); let moved=false, sx=0, sy=0, swallow=false;
 let sight=null, aiming=false;
 // `gone`: when a popup or the alliance prompt last went away by itself (the request ran out, the nation fell, the
 // phone turned). A press on the map in the next moment was meant for it, and only closes things.
+// A press on the map within a finger's width of the toolbar, the zoom buttons or a request waiting for an answer was
+// meant for them: it does nothing on the map (a drag from there still moves it).
+const EDGE=16;
+function nearControl(x,y){
+  for (const id of ['bar','zoom','ask']){
+    const r=$(id).getBoundingClientRect(); if (!r.width || $(id).classList.contains('hidden')) continue;
+    if (x>r.left-EDGE && x<r.right+EDGE && y>r.top-EDGE && y<r.bottom+EDGE) return true;
+  }
+  return false;
+}
 cv.addEventListener('pointerdown',e=>{
-  swallow=popCell>=0 || !$('tray').classList.contains('hidden') || performance.now()-gone<600; closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
+  const near=nearControl(e.clientX,e.clientY);
+  swallow=near || popCell>=0 || !$('tray').classList.contains('hidden') || performance.now()-gone<600; closePop(); try { cv.setPointerCapture(e.pointerId); } catch(_){}
   pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); clearTimeout(pressT);
   if (pts.size===1){
     moved=false; sx=e.clientX; sy=e.clientY; aiming=armed>=WPN && !swallow;
     if (aiming) sight={x:sx,y:sy};
-    else { const x=sx, y=sy; pressT=setTimeout(()=>{ if (pts.size===1 && !moved){ swallow=true; longPress(x,y); } },450); }
+    else if (!near){ const x=sx, y=sy; pressT=setTimeout(()=>{ if (pts.size===1 && !moved){ swallow=true; longPress(x,y); } },450); }
   } else { moved=true; aiming=false; sight=null; }
 });
 cv.addEventListener('contextmenu',e=>{ e.preventDefault(); clearTimeout(pressT); swallow=true; longPress(e.clientX,e.clientY); });
@@ -1423,7 +1446,7 @@ const up=e=>{
   const tap=pts.size===1 && (aiming || !moved) && e.type==='pointerup'; pts.delete(e.pointerId);
   if (aiming || e.pointerType!=='mouse') sight=null;
   aiming=false;
-  if (tap && G && !swallow){ tapX=e.clientX; tapY=e.clientY; G.fx.push({x:(tapX-V.x)/V.s,y:(tapY-V.y)/V.s,t:performance.now()}); tapAt(e.clientX,e.clientY); }
+  if (tap && G && !swallow && !nearControl(e.clientX,e.clientY)){ tapX=e.clientX; tapY=e.clientY; G.fx.push({x:(tapX-V.x)/V.s,y:(tapY-V.y)/V.s,t:performance.now()}); tapAt(e.clientX,e.clientY); }
 };
 cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up); cv.addEventListener('pointerleave',()=>{ if (!pts.size) sight=null; });
 cv.addEventListener('wheel',e=>{ e.preventDefault(); if (G){ zoomAt(e.clientX,e.clientY,e.deltaY<0?1.2:1/1.2); clampView(); } },{passive:false});
@@ -1492,7 +1515,7 @@ function natState(){
   const o=natWho, Q=G.players[o]; if (!Q.alive){ closePop(); gone=performance.now(); return; }
   $('natH').innerHTML='<i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+COLS[o]+'"></i> <b>'+Q.name+'</b><br>'+fmt(Q.troops)+' · ● '+fmt(Q.gold)+(Q.traitor>G.tick?' · 💔':'');
   const al=allied(ME,o), asked=G.players[ME].asks.some(a=>a.from===o);
-  $('nAlly').textContent=al?'💔':'🤝'; $('nAlly').disabled=!al && !asked && G.cool[ME*G.n1+o]>G.tick; $('nBoat').disabled=al;
+  $('nAlly').textContent=al?'💔':'🤝'; $('nAlly').classList.toggle('off',!al && !asked && G.cool[ME*G.n1+o]>G.tick); $('nBoat').classList.toggle('off',al);
 }
 // a cell of nation o at or near c
 function cellOf(o,c){
@@ -1591,7 +1614,28 @@ $('solo').addEventListener('click',()=>{ NET.solo=true; renderMenu(); });
 $('play').addEventListener('click',()=>start(save.map));
 $('online').addEventListener('click',()=>{ $('join').classList.remove('hidden'); renderMenu(); $('addr').focus(); });
 $('toMp').addEventListener('click',()=>{ NET.solo=false; renderMenu(); });
-$('ratio').addEventListener('input',()=>{ $('rv').textContent=$('ratio').value+'%'; });
+// The attack share moves only by dragging, as far as the finger travels, never to where it lands: a press meant for
+// the 🏗️ button beside it, or a stray tap, leaves the share as it was.
+let rdrag=null;
+$('rbox').addEventListener('pointerdown',e=>{ rdrag={id:e.pointerId,x:e.clientX,v:+$('ratio').value}; try { $('rbox').setPointerCapture(e.pointerId); } catch(_){} });
+$('rbox').addEventListener('pointermove',e=>{
+  if (!rdrag || e.pointerId!==rdrag.id) return;
+  const r=$('ratio'), w=r.getBoundingClientRect().width||1;
+  r.value=within(Math.round((rdrag.v+(e.clientX-rdrag.x)/w*95)/5)*5,5,100); $('rv').textContent=r.value+'%';
+});
+for (const t of ['pointerup','pointercancel']) $('rbox').addEventListener(t,()=>{ rdrag=null; });
+// a press on the toolbar between buttons goes to the button beside it
+$('bar').addEventListener('click',e=>{
+  if (e.target.closest('button,#rbox')) return;
+  const b=nearest(['aBld','aNuke','menuBtn'].map($),e.clientX,e.clientY,14); if (b) b.click();
+});
+// of the elements in list, the one nearest the point (x,y), if it is within `max` pixels
+function nearest(list,x,y,max){
+  let best=null, bd=max*max;
+  for (const b of list){ const r=b.getBoundingClientRect(); if (!r.width) continue;
+    const dx=Math.max(r.left-x,0,x-r.right), dy=Math.max(r.top-y,0,y-r.bottom), d=dx*dx+dy*dy; if (d<=bd){ bd=d; best=b; } }
+  return best;
+}
 $('zin').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1.6); clampView(); } }); $('zout').addEventListener('click',()=>{ if (G){ zoomAt(cw/2,ch/2-36,1/1.6); clampView(); } });
 // a press on a bar button disarms what it armed; otherwise it opens its tray, or closes it if already open
 for (const [id,list] of [['aBld',BUILDS],['aNuke',WEAPONS]]) $(id).addEventListener('click',()=>{
@@ -1605,15 +1649,32 @@ for (const [id,list] of [['aBld',BUILDS],['aNuke',WEAPONS]]) $(id).addEventListe
 function placeTray(){
   if (!trayOf) return;
   const e=$('tray'), r=$(trayOf).getBoundingClientRect(), w=e.offsetWidth/2+8;
-  e.style.left=within(r.left+r.width/2,w,cw-w-48)+'px'; e.style.top=($($('ask').classList.contains('hidden')?'bar':'ask').getBoundingClientRect().top-8)+'px';      // clear of the zoom buttons and of a request waiting for an answer
+  e.style.left=within(r.left+r.width/2,w,cw-w-56)+'px'; e.style.top=($($('ask').classList.contains('hidden')?'bar':'ask').getBoundingClientRect().top-8)+'px';      // clear of the zoom buttons and of a request waiting for an answer
 }
-$('tray').addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b || b.disabled) return; closePop(); arm(+b.dataset.t); });
-$('nAlly').addEventListener('click',()=>{ const o=natWho; if (o>0 && o!==ME && G.players[o].alive) act(allied(ME,o)?{k:'break',q:o}:{k:'req',q:o}); closePop(); });
-$('nBoat').addEventListener('click',()=>{ const o=natWho, c=o>0 && natCell>=0 ? cellOf(o,natCell) : -1; closePop(); if (c>=0) tapCell(c,true); });
-function answer(k){ const a=G.players[ME].asks.find(a=>a.from===askFrom); if (!a) return; answered[a.from]=a.until; act({k,q:a.from}); hud(); }
+// a press in the tray takes the button nearest the finger, so one between two buttons or at the edge still counts;
+// one that costs more than you have says so and leaves the tray open
+$('tray').addEventListener('click',e=>{
+  const b=e.target.closest('button') || nearest([...$('tray').children],e.clientX,e.clientY,40); if (!b) return;
+  const t=+b.dataset.t, me=G.players[ME], c=priceOf(t,me), x=BUILDS.concat(WEAPONS).find(x=>x.t===t);
+  if (me.gold<c){ toast(x.ico+' '+x.name+' needs ● '+fmt(c)); return; }
+  closePop(); arm(t);
+});
+// a greyed-out button says why instead of doing nothing
+$('nAlly').addEventListener('click',()=>{ const o=natWho; if ($('nAlly').classList.contains('off')){ toast('🤝 Asked '+G.players[o].name+' a moment ago'); return; } if (o>0 && o!==ME && G.players[o].alive) act(allied(ME,o)?{k:'break',q:o}:{k:'req',q:o}); closePop(); });
+$('nBoat').addEventListener('click',()=>{ if ($('nBoat').classList.contains('off')){ toast('⛵ '+G.players[natWho].name+' is your ally'); return; } const o=natWho, c=o>0 && natCell>=0 ? cellOf(o,natCell) : -1; closePop(); if (c>=0) tapCell(c,true); });
+// the request pops up where the finger may already be going: presses in its first moment do not answer it
+function answer(k){ if (performance.now()-askAt<700) return; const a=G.players[ME].asks.find(a=>a.from===askFrom); if (!a) return; answered[a.from]=a.until; act({k,q:a.from}); hud(); }
 $('askY').addEventListener('click',()=>answer('yes'));
 $('askN').addEventListener('click',()=>answer('no'));
-$('atk').addEventListener('pointerdown',e=>{ const b=e.target.closest('button'); if (!b) return; act({k:'retreat',a:+b.dataset.a}); hud(); });
+// Retreat takes a whole tap on the attack's button, down and up on the same one, not a brush on the way past.
+// The row is redrawn as the numbers change, so the button is found again where the finger lifts.
+let atkDown=null;
+$('atk').addEventListener('pointerdown',e=>{ const b=e.target.closest('button'); atkDown=b?{a:b.dataset.a,x:e.clientX,y:e.clientY}:null; });
+addEventListener('pointerup',e=>{
+  const d=atkDown; atkDown=null; if (!d || !G || Math.hypot(e.clientX-d.x,e.clientY-d.y)>14) return;
+  const el=document.elementFromPoint(e.clientX,e.clientY), b=el && el.closest('#atk button');
+  if (b && b.dataset.a===d.a){ act({k:'retreat',a:+d.a}); hud(); }
+});
 $('speed').addEventListener('click',()=>{ speed=speed===1?2:speed===2?4:1; $('speed').textContent='×'+speed; });
 // ☰ in a match: the pause menu. Alone the match stops while it is open; over the network it carries on.
 $('menuBtn').addEventListener('click',()=>{
